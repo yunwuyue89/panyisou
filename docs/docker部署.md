@@ -19,14 +19,14 @@ docker-compose up -d
 3. 访问服务
 
 ```
-http://localhost:8080
+http://localhost:8888
 ```
 
 #### 方法2：直接使用Docker命令
 
 ```bash
 docker run -d --name pansou \
-  -p 8080:8080 \
+  -p 8888:8888 \
   -v pansou-cache:/app/cache \
   -e CHANNELS="tgsearchers2,SharePanBaidu,yunpanxunlei" \
   -e CACHE_ENABLED=true \

@@ -207,7 +207,7 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
 |----------|------|--------|
 | CHANNELS | 默认搜索频道列表（逗号分隔） | tgsearchers2 |
 | CONCURRENCY | 默认并发数 | 频道数+插件数+10 |
-| PORT | 服务端口 | 8080 |
+| PORT | 服务端口 | 8888 |
 | PROXY | SOCKS5代理 | - |
 | CACHE_ENABLED | 是否启用缓存 | true |
 | CACHE_PATH | 缓存文件路径 | ./cache |
