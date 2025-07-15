@@ -310,12 +310,6 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 // filterResponseByType 根据结果类型过滤响应
 func filterResponseByType(response model.SearchResponse, resultType string) model.SearchResponse {
 	switch resultType {
-	case "results":
-		// 只返回Results
-		return model.SearchResponse{
-			Total:   response.Total,
-			Results: response.Results,
-		}
 	case "merged_by_type":
 		// 只返回MergedByType，Results设为nil，结合omitempty标签，JSON序列化时会忽略此字段
 		return model.SearchResponse{
@@ -323,9 +317,22 @@ func filterResponseByType(response model.SearchResponse, resultType string) mode
 			MergedByType: response.MergedByType,
 			Results:      nil,
 		}
-	default:
-		// 默认返回全部
+	case "all":
 		return response
+	case "results":
+		// 只返回Results
+		return model.SearchResponse{
+			Total:   response.Total,
+			Results: response.Results,
+		}
+	default:
+		// // 默认返回全部
+		// return response
+		return model.SearchResponse{
+			Total:        response.Total,
+			MergedByType: response.MergedByType,
+			Results:      nil,
+		}
 	}
 }
 
