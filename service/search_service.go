@@ -14,6 +14,7 @@ import (
 	"pansou/util"
 	"pansou/util/cache"
 	"pansou/util/pool"
+	"sync" // Added for sync.WaitGroup
 )
 
 // 优先关键词列表
@@ -22,6 +23,7 @@ var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附
 // 全局缓存实例和缓存是否初始化标志
 var (
 	twoLevelCache    *cache.TwoLevelCache
+	enhancedTwoLevelCache *cache.EnhancedTwoLevelCache
 	cacheInitialized bool
 )
 
@@ -29,6 +31,14 @@ var (
 func init() {
 	if config.AppConfig != nil && config.AppConfig.CacheEnabled {
 		var err error
+		// 优先使用增强版缓存
+		enhancedTwoLevelCache, err = cache.NewEnhancedTwoLevelCache()
+		if err == nil {
+			cacheInitialized = true
+			return
+		}
+		
+		// 如果增强版缓存初始化失败，回退到原始缓存
 		twoLevelCache, err = cache.NewTwoLevelCache()
 		if err == nil {
 			cacheInitialized = true
@@ -46,9 +56,16 @@ func NewSearchService(pluginManager *plugin.PluginManager) *SearchService {
 	// 检查缓存是否已初始化，如果未初始化则尝试重新初始化
 	if !cacheInitialized && config.AppConfig != nil && config.AppConfig.CacheEnabled {
 		var err error
-		twoLevelCache, err = cache.NewTwoLevelCache()
+		// 优先使用增强版缓存
+		enhancedTwoLevelCache, err = cache.NewEnhancedTwoLevelCache()
 		if err == nil {
 			cacheInitialized = true
+		} else {
+			// 如果增强版缓存初始化失败，回退到原始缓存
+			twoLevelCache, err = cache.NewTwoLevelCache()
+			if err == nil {
+				cacheInitialized = true
+			}
 		}
 	}
 
@@ -128,130 +145,46 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 		}
 	}
 
-	// 立即生成缓存键并检查缓存
-	cacheKey := cache.GenerateCacheKey(keyword, channels, sourceType, plugins)
-
-	// 如果未启用强制刷新，尝试从缓存获取结果
-	if !forceRefresh && twoLevelCache != nil && config.AppConfig.CacheEnabled {
-		data, hit, err := twoLevelCache.Get(cacheKey)
-
-		if err == nil && hit {
-			var response model.SearchResponse
-			if err := cache.DeserializeWithPool(data, &response); err == nil {
-				// 根据resultType过滤返回结果
-				return filterResponseByType(response, resultType), nil
-			}
-		}
-	}
-
-	// 获取所有可用插件
-	var availablePlugins []plugin.SearchPlugin
-	if s.pluginManager != nil && (sourceType == "all" || sourceType == "plugin") {
-		allPlugins := s.pluginManager.GetPlugins()
-
-		// 确保plugins不为nil并且有非空元素
-		hasPlugins := plugins != nil && len(plugins) > 0
-		hasNonEmptyPlugin := false
-
-		if hasPlugins {
-			for _, p := range plugins {
-				if p != "" {
-					hasNonEmptyPlugin = true
-					break
-				}
-			}
-		}
-
-		// 只有当plugins数组包含非空元素时才进行过滤
-		if hasPlugins && hasNonEmptyPlugin {
-			pluginMap := make(map[string]bool)
-			for _, p := range plugins {
-				if p != "" { // 忽略空字符串
-					pluginMap[strings.ToLower(p)] = true
-				}
-			}
-
-			for _, p := range allPlugins {
-				if pluginMap[strings.ToLower(p.Name())] {
-					availablePlugins = append(availablePlugins, p)
-				}
-			}
-		} else {
-			// 如果plugins为nil、空数组或只包含空字符串，视为未指定，使用所有插件
-			availablePlugins = allPlugins
-		}
-	}
-
-	// 控制并发数：如果用户没有指定有效值，则默认使用"频道数+插件数+10"的并发数
-	pluginCount := len(availablePlugins)
-
-	// 根据sourceType决定是否搜索Telegram频道
-	channelCount := 0
+	// 并行获取TG搜索和插件搜索结果
+	var tgResults []model.SearchResult
+	var pluginResults []model.SearchResult
+	
+	var wg sync.WaitGroup
+	var tgErr, pluginErr error
+	
+	// 如果需要搜索TG
 	if sourceType == "all" || sourceType == "tg" {
-		channelCount = len(channels)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tgResults, tgErr = s.searchTG(keyword, channels, forceRefresh)
+		}()
 	}
-
-	if concurrency <= 0 {
-		concurrency = channelCount + pluginCount + 10
-		if concurrency < 1 {
-			concurrency = 1
-		}
+	
+	// 如果需要搜索插件
+	if sourceType == "all" || sourceType == "plugin" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// 对于插件搜索，我们总是希望获取最新的缓存数据
+			// 因此，即使forceRefresh=false，我们也需要确保获取到最新的缓存
+			pluginResults, pluginErr = s.searchPlugins(keyword, plugins, forceRefresh, concurrency)
+		}()
 	}
-
-	// 计算任务总数（频道数 + 插件数）
-	totalTasks := channelCount + pluginCount
-
-	// 如果没有任务要执行，返回空结果
-	if totalTasks == 0 {
-		return model.SearchResponse{
-			Total:        0,
-			Results:      []model.SearchResult{},
-			MergedByType: make(model.MergedLinks),
-		}, nil
+	
+	// 等待所有搜索完成
+	wg.Wait()
+	
+	// 检查错误
+	if tgErr != nil {
+		return model.SearchResponse{}, tgErr
 	}
-
-	// 使用工作池执行并行搜索
-	tasks := make([]pool.Task, 0, totalTasks)
-
-	// 添加频道搜索任务（如果需要）
-	if sourceType == "all" || sourceType == "tg" {
-		for _, channel := range channels {
-			ch := channel // 创建副本，避免闭包问题
-			tasks = append(tasks, func() interface{} {
-				results, err := s.searchChannel(keyword, ch)
-				if err != nil {
-					return nil
-				}
-				return results
-			})
-		}
+	if pluginErr != nil {
+		return model.SearchResponse{}, pluginErr
 	}
-
-	// 添加插件搜索任务（如果需要）
-	for _, p := range availablePlugins {
-		plugin := p // 创建副本，避免闭包问题
-		tasks = append(tasks, func() interface{} {
-			results, err := plugin.Search(keyword)
-			if err != nil {
-				return nil
-			}
-			return results
-		})
-	}
-
-	// 使用带超时控制的工作池执行所有任务并获取结果
-	results := pool.ExecuteBatchWithTimeout(tasks, concurrency, config.AppConfig.PluginTimeout)
-
-	// 预估每个任务平均返回22个结果
-	allResults := make([]model.SearchResult, 0, totalTasks*22)
-
-	// 合并所有结果
-	for _, result := range results {
-		if result != nil {
-			channelResults := result.([]model.SearchResult)
-			allResults = append(allResults, channelResults...)
-		}
-	}
+	
+	// 合并结果
+	allResults := mergeSearchResults(tgResults, pluginResults)
 
 	// 过滤结果，确保标题包含搜索关键词
 	filteredResults := filterResultsByKeyword(allResults, keyword)
@@ -288,19 +221,6 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 		Total:        total,
 		Results:      filteredForResults, // 使用进一步过滤的结果
 		MergedByType: mergedLinks,
-	}
-
-	// 异步缓存搜索结果（缓存完整结果，以便后续可以根据不同resultType过滤）
-	if twoLevelCache != nil && config.AppConfig.CacheEnabled {
-		go func(resp model.SearchResponse) {
-			data, err := cache.SerializeWithPool(resp)
-			if err != nil {
-				return
-			}
-
-			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
-			twoLevelCache.Set(cacheKey, data, ttl)
-		}(response)
 	}
 
 	// 根据resultType过滤返回结果
@@ -580,6 +500,291 @@ func mergeResultsByType(results []model.SearchResult) model.MergedLinks {
 	}
 
 	return mergedLinks
+}
+
+// searchTG 搜索TG频道
+func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh bool) ([]model.SearchResult, error) {
+	// 生成缓存键
+	cacheKey := cache.GenerateTGCacheKey(keyword, channels)
+	
+	// 如果未启用强制刷新，尝试从缓存获取结果
+	if !forceRefresh && cacheInitialized && config.AppConfig.CacheEnabled {
+		var data []byte
+		var hit bool
+		var err error
+		
+		// 优先使用增强版缓存
+		if enhancedTwoLevelCache != nil {
+			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
+			
+			if err == nil && hit {
+				var results []model.SearchResult
+				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
+					return results, nil
+				}
+			}
+		} else if twoLevelCache != nil {
+			data, hit, err = twoLevelCache.Get(cacheKey)
+			
+			if err == nil && hit {
+				var results []model.SearchResult
+				if err := cache.DeserializeWithPool(data, &results); err == nil {
+					return results, nil
+				}
+			}
+		}
+	}
+	
+	// 缓存未命中，执行实际搜索
+	var results []model.SearchResult
+	
+	// 使用工作池并行搜索多个频道
+	tasks := make([]pool.Task, 0, len(channels))
+	
+	for _, channel := range channels {
+		ch := channel // 创建副本，避免闭包问题
+		tasks = append(tasks, func() interface{} {
+			results, err := s.searchChannel(keyword, ch)
+			if err != nil {
+				return nil
+			}
+			return results
+		})
+	}
+	
+	// 执行搜索任务并获取结果
+	taskResults := pool.ExecuteBatchWithTimeout(tasks, len(channels), config.AppConfig.PluginTimeout)
+	
+	// 合并所有频道的结果
+	for _, result := range taskResults {
+		if result != nil {
+			channelResults := result.([]model.SearchResult)
+			results = append(results, channelResults...)
+		}
+	}
+	
+	// 异步缓存结果
+	if cacheInitialized && config.AppConfig.CacheEnabled {
+		go func(res []model.SearchResult) {
+			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
+			
+			// 优先使用增强版缓存
+			if enhancedTwoLevelCache != nil {
+				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
+				if err != nil {
+					return
+				}
+				enhancedTwoLevelCache.Set(cacheKey, data, ttl)
+			} else if twoLevelCache != nil {
+				data, err := cache.SerializeWithPool(res)
+				if err != nil {
+					return
+				}
+				twoLevelCache.Set(cacheKey, data, ttl)
+			}
+		}(results)
+	}
+	
+	return results, nil
+}
+
+// searchPlugins 搜索插件
+func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRefresh bool, concurrency int) ([]model.SearchResult, error) {
+	// 生成缓存键
+	cacheKey := cache.GeneratePluginCacheKey(keyword, plugins)
+	
+	// 如果未启用强制刷新，尝试从缓存获取结果
+	if !forceRefresh && cacheInitialized && config.AppConfig.CacheEnabled {
+		var data []byte
+		var hit bool
+		var err error
+		
+		// 优先使用增强版缓存
+		if enhancedTwoLevelCache != nil {
+			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
+			
+			if err == nil && hit {
+				var results []model.SearchResult
+				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
+					// 确保缓存数据是最新的
+					// 如果缓存数据是最近更新的（例如在过去30秒内），则直接返回
+					// 否则，我们将重新执行搜索以获取最新数据
+					if len(results) > 0 {
+						// 获取当前时间
+						now := time.Now()
+						// 检查缓存数据是否是最近更新的
+						// 这里我们假设如果缓存数据中有结果的时间戳在过去30秒内，则认为是最新的
+						for _, result := range results {
+							if !result.Datetime.IsZero() && now.Sub(result.Datetime) < 30*time.Second {
+								return results, nil
+							}
+						}
+					} else {
+						// 如果缓存中没有数据，直接返回空结果
+						return results, nil
+					}
+				}
+			}
+		} else if twoLevelCache != nil {
+			data, hit, err = twoLevelCache.Get(cacheKey)
+			
+			if err == nil && hit {
+				var results []model.SearchResult
+				if err := cache.DeserializeWithPool(data, &results); err == nil {
+					// 确保缓存数据是最新的
+					// 如果缓存数据是最近更新的（例如在过去30秒内），则直接返回
+					// 否则，我们将重新执行搜索以获取最新数据
+					if len(results) > 0 {
+						// 获取当前时间
+						now := time.Now()
+						// 检查缓存数据是否是最近更新的
+						// 这里我们假设如果缓存数据中有结果的时间戳在过去30秒内，则认为是最新的
+						for _, result := range results {
+							if !result.Datetime.IsZero() && now.Sub(result.Datetime) < 30*time.Second {
+								return results, nil
+							}
+						}
+					} else {
+						// 如果缓存中没有数据，直接返回空结果
+						return results, nil
+					}
+				}
+			}
+		}
+	}
+	
+	// 缓存未命中或缓存数据不是最新的，执行实际搜索
+	// 获取所有可用插件
+	var availablePlugins []plugin.SearchPlugin
+	if s.pluginManager != nil {
+		allPlugins := s.pluginManager.GetPlugins()
+		
+		// 确保plugins不为nil并且有非空元素
+		hasPlugins := plugins != nil && len(plugins) > 0
+		hasNonEmptyPlugin := false
+		
+		if hasPlugins {
+			for _, p := range plugins {
+				if p != "" {
+					hasNonEmptyPlugin = true
+					break
+				}
+			}
+		}
+		
+		// 只有当plugins数组包含非空元素时才进行过滤
+		if hasPlugins && hasNonEmptyPlugin {
+			pluginMap := make(map[string]bool)
+			for _, p := range plugins {
+				if p != "" { // 忽略空字符串
+					pluginMap[strings.ToLower(p)] = true
+				}
+			}
+			
+			for _, p := range allPlugins {
+				if pluginMap[strings.ToLower(p.Name())] {
+					availablePlugins = append(availablePlugins, p)
+				}
+			}
+		} else {
+			// 如果plugins为nil、空数组或只包含空字符串，视为未指定，使用所有插件
+			availablePlugins = allPlugins
+		}
+	}
+	
+	// 控制并发数
+	if concurrency <= 0 {
+		concurrency = len(availablePlugins) + 10
+		if concurrency < 1 {
+			concurrency = 1
+		}
+	}
+	
+	// 使用工作池执行并行搜索
+	tasks := make([]pool.Task, 0, len(availablePlugins))
+	for _, p := range availablePlugins {
+		plugin := p // 创建副本，避免闭包问题
+		tasks = append(tasks, func() interface{} {
+			results, err := plugin.Search(keyword)
+			if err != nil {
+				return nil
+			}
+			return results
+		})
+	}
+	
+	// 执行搜索任务并获取结果
+	results := pool.ExecuteBatchWithTimeout(tasks, concurrency, config.AppConfig.PluginTimeout)
+	
+	// 合并所有插件的结果
+	var allResults []model.SearchResult
+	for _, result := range results {
+		if result != nil {
+			pluginResults := result.([]model.SearchResult)
+			allResults = append(allResults, pluginResults...)
+		}
+	}
+	
+	// 异步缓存结果
+	if cacheInitialized && config.AppConfig.CacheEnabled {
+		go func(res []model.SearchResult) {
+			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
+			
+			// 优先使用增强版缓存
+			if enhancedTwoLevelCache != nil {
+				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
+				if err != nil {
+					return
+				}
+				enhancedTwoLevelCache.Set(cacheKey, data, ttl)
+			} else if twoLevelCache != nil {
+				data, err := cache.SerializeWithPool(res)
+				if err != nil {
+					return
+				}
+				twoLevelCache.Set(cacheKey, data, ttl)
+			}
+		}(allResults)
+	}
+	
+	return allResults, nil
+}
+
+// 合并搜索结果
+func mergeSearchResults(tgResults, pluginResults []model.SearchResult) []model.SearchResult {
+	// 预估合并后的结果数量
+	totalSize := len(tgResults) + len(pluginResults)
+	if totalSize == 0 {
+		return []model.SearchResult{}
+	}
+	
+	// 创建结果映射，用于去重
+	resultMap := make(map[string]model.SearchResult, totalSize)
+	
+	// 添加TG搜索结果
+	for _, result := range tgResults {
+		resultMap[result.UniqueID] = result
+	}
+	
+	// 添加或更新插件搜索结果（如果有重复，保留较新的）
+	for _, result := range pluginResults {
+		if existing, ok := resultMap[result.UniqueID]; ok {
+			// 如果已存在，保留较新的
+			if result.Datetime.After(existing.Datetime) {
+				resultMap[result.UniqueID] = result
+			}
+		} else {
+			resultMap[result.UniqueID] = result
+		}
+	}
+	
+	// 转换回切片
+	mergedResults := make([]model.SearchResult, 0, len(resultMap))
+	for _, result := range resultMap {
+		mergedResults = append(mergedResults, result)
+	}
+	
+	return mergedResults
 }
 
 // GetPluginManager 获取插件管理器

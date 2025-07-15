@@ -72,6 +72,34 @@ func init() {
 	precomputedHashes.Store("all_channels", allChannelsHash)
 }
 
+// GenerateTGCacheKey 为TG搜索生成缓存键
+func GenerateTGCacheKey(keyword string, channels []string) string {
+	// 关键词标准化
+	normalizedKeyword := strings.ToLower(strings.TrimSpace(keyword))
+	
+	// 获取频道列表哈希
+	channelsHash := getChannelsHash(channels)
+	
+	// 生成TG搜索特定的缓存键
+	keyStr := fmt.Sprintf("tg:%s:%s", normalizedKeyword, channelsHash)
+	hash := md5.Sum([]byte(keyStr))
+	return hex.EncodeToString(hash[:])
+}
+
+// GeneratePluginCacheKey 为插件搜索生成缓存键
+func GeneratePluginCacheKey(keyword string, plugins []string) string {
+	// 关键词标准化
+	normalizedKeyword := strings.ToLower(strings.TrimSpace(keyword))
+	
+	// 获取插件列表哈希
+	pluginsHash := getPluginsHash(plugins)
+	
+	// 生成插件搜索特定的缓存键
+	keyStr := fmt.Sprintf("plugin:%s:%s", normalizedKeyword, pluginsHash)
+	hash := md5.Sum([]byte(keyStr))
+	return hex.EncodeToString(hash[:])
+}
+
 // GenerateCacheKey 根据所有影响搜索结果的参数生成缓存键
 func GenerateCacheKey(keyword string, channels []string, sourceType string, plugins []string) string {
 	// 关键词标准化

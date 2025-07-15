@@ -9,7 +9,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和网盘
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
 - **智能排序**：基于时间和关键词权重的多级排序策略
 - **插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件；支持"尽快响应，持续处理"的异步搜索模式
-- **两级缓存**：内存+磁盘缓存机制，大幅提升重复查询速度；异步插件缓存自动保存到磁盘，系统重启后自动恢复，
+- **两级异步缓存**：内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能，即使在不强制刷新的情况下也能获取异步插件更新的最新缓存数据
 
 ## 支持的网盘类型
 
@@ -55,6 +55,7 @@ export CACHE_ENABLED=true
 export CACHE_PATH="./cache"
 export CACHE_MAX_SIZE=100  # MB
 export CACHE_TTL=60        # 分钟
+export SHARD_COUNT=8       # 分片数量
 
 # 异步插件配置
 export ASYNC_PLUGIN_ENABLED=true
@@ -213,6 +214,8 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
 | CACHE_PATH | 缓存文件路径 | ./cache |
 | CACHE_MAX_SIZE | 最大缓存大小(MB) | 100 |
 | CACHE_TTL | 缓存生存时间(分钟) | 60 |
+| SHARD_COUNT | 缓存分片数量 | 8 |
+| SERIALIZER_TYPE | 序列化器类型(gob/json) | gob |
 | ENABLE_COMPRESSION | 是否启用压缩 | false |
 | MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | 1024 |
 | GC_PERCENT | GC触发百分比 | 100 |
@@ -223,6 +226,7 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
 | ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | 20 |
 | ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 100 |
 | ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | 1 |
+| CACHE_FRESHNESS_SECONDS | 缓存数据新鲜度(秒) | 30 |
 
 ## 性能优化
 
@@ -230,11 +234,16 @@ PanSou 实现了多项性能优化技术：
 
 1. **JSON处理优化**：使用 sonic 高性能 JSON 库
 2. **内存优化**：预分配策略、对象池化、GC参数优化
-3. **缓存优化**：两级缓存、异步写入、优化键生成
+3. **缓存优化**：
+   - 增强版两级缓存（内存+分片磁盘）
+   - 分片磁盘缓存减少锁竞争
+   - 高效序列化（Gob和JSON双支持）
+   - 分离的缓存键（TG搜索和插件搜索独立缓存）
+   - 缓存数据时间戳检查（获取最新数据）
+   - 异步写入（不阻塞主流程）
 4. **HTTP客户端优化**：连接池、HTTP/2支持
 5. **并发优化**：工作池、智能并发控制
 6. **传输压缩**：支持 gzip 压缩
-7. **异步插件缓存**：持久化缓存、即时保存、优雅关闭机制
 
 ## 异步插件系统
 
@@ -248,142 +257,26 @@ PanSou实现了高级异步插件系统，解决了某些搜索源响应时间�
 - **优雅关闭**：在程序退出前保存缓存，确保数据不丢失
 - **增量更新**：智能合并新旧结果，保留有价值的数据
 - **后台自动刷新**：对于接近过期的缓存，在后台自动刷新
-- **资源管理**：通过工作池控制并发任务数量，避免资源耗尽
+- **与主程序缓存协同**：通过时间戳检查机制，确保即使在不强制刷新的情况下也能获取最新缓存数据
 
-### 异步插件工作流程
+### 缓存系统特点
 
-1. **缓存检查**：首先检查是否有有效缓存
-2. **快速响应**：如果有缓存，立即返回；如果缓存接近过期，在后台刷新
-3. **双通道处理**：如果没有缓存，启动快速响应通道和后台处理通道
-4. **超时控制**：在响应超时时返回当前结果（可能为空），后台继续处理
-5. **缓存更新**：后台处理完成后更新缓存，供后续查询使用
+1. **分片磁盘缓存**：
+   - 将缓存数据分散到多个子目录，减少锁竞争
+   - 通过哈希算法将缓存键均匀分布到不同分片
+   - 提高高并发场景下的性能
 
-## 插件系统
+2. **序列化器接口**：
+   - 统一的序列化和反序列化操作
+   - 支持Gob和JSON双序列化方式
+   - Gob序列化提供更高性能和更小的结果大小
 
-PanSou 实现了灵活的插件系统，允许轻松扩展搜索来源
+3. **缓存数据时间戳检查**：
+   - 检查缓存数据是否是最新的（30秒内更新）
+   - 确保获取异步插件在后台更新的最新缓存数据
+   - 在不强制刷新的情况下也能获取最新数据
 
-详情参考[插件开发指南.md](docs/插件开发指南.md)
-
-### 插件特性
-
-- **自动注册机制**：插件通过init函数自动注册，无需修改主程序代码
-- **统一接口**：所有插件实现相同的SearchPlugin接口
-- **双层超时控制**：插件内部使用自定义超时时间，系统外部提供强制超时保障
-- **并发执行**：插件搜索与频道搜索并发执行，提高整体性能
-- **结果标准化**：插件返回标准化的搜索结果，便于统一处理
-- **异步处理**：支持异步插件，实现"尽快响应，持续处理"的模式
-
-### 开发自定义插件
-
-1. 创建新的插件包：
-
-```go
-package myplugin
-
-import (
-    "pansou/model"
-    "pansou/plugin"
-)
-
-// 在init函数中注册插件
-func init() {
-    plugin.RegisterGlobalPlugin(NewMyPlugin())
-}
-
-// MyPlugin 自定义插件
-type MyPlugin struct {}
-
-// NewMyPlugin 创建新的插件实例
-func NewMyPlugin() *MyPlugin {
-    return &MyPlugin{}
-}
-
-// Name 返回插件名称
-func (p *MyPlugin) Name() string {
-    return "myplugin"
-}
-
-// Priority 返回插件优先级
-func (p *MyPlugin) Priority() int {
-    return 3 // 中等优先级
-}
-
-// Search 执行搜索并返回结果
-func (p *MyPlugin) Search(keyword string) ([]model.SearchResult, error) {
-    // 实现搜索逻辑
-    // ...
-    
-    return results, nil
-}
-```
-
-2. 在main.go中导入插件包：
-
-```go
-import (
-    // 导入插件包以触发init函数
-    _ "pansou/plugin/myplugin"
-)
-```
-
-## 附录 
-
-### TG频道
-
-```
-"channels": ["tgsearchers2","SharePanBaidu", "yunpanxunlei", "tianyifc", "BaiduCloudDisk", "txtyzy", "peccxinpd", "gotopan", "xingqiump4", "yunpanqk", "PanjClub", "kkxlzy", "baicaoZY", "MCPH01", "share_aliyun", "pan115_share", "bdwpzhpd", "ysxb48", "pankuake_share", "jdjdn1111", "yggpan", "yunpanall", "MCPH086", "zaihuayun", "Q66Share", "NewAliPan", "Oscar_4Kmovies", "ucwpzy", "alyp_TV", "alyp_4K_Movies", "shareAliyun", "alyp_1", "yunpanpan", "hao115", "yunpanshare", "dianyingshare", "Quark_Movies", "XiangxiuNB", "NewQuark", "ydypzyfx", "kuakeyun", "ucquark", "xx123pan", "yingshifenxiang123", "zyfb123", "pan123pan", "tyypzhpd", "tianyirigeng", "cloudtianyi", "hdhhd21", "Lsp115", "oneonefivewpfx", "Maidanglaocom", "qixingzhenren", "taoxgzy", "tgsearchers115", "Channel_Shares_115", "tyysypzypd", "vip115hot", "wp123zy", "yunpan139", "yunpan189", "yunpanuc", "yydf_hzl", "alyp_Animation", "alyp_JLP","leoziyuan"]
-```
-
-### 配置参考
-
-supervisor配置参考
-
-```
-[program:pansou]
-environment=PORT=9999,CHANNELS="SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,pan115_share,bdwpzhpd,ysxb48,pankuake_share,jdjdn1111,yggpan,yunpanall,MCPH086,zaihuayun,Q66Share,NewAliPan,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,yunpanpan,hao115,yunpanshare,dianyingshare,Quark_Movies,XiangxiuNB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,pan123pan,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,tgsearchers2,leoziyuan"
-command=/home/work/pansou/pansou
-directory=/home/work/pansou
-autostart=true
-autorestart=true
-startsecs=5
-startretries=3
-exitcodes=0
-stopwaitsecs=10
-stopasgroup=true
-killasgroup=true
-```
-
-nginx配置参考
-
-```
-server {
-    listen 80;
-    server_name pansou.252035.xyz;
-
-    # 将 HTTP 重定向到 HTTPS
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2; # 添加 http2
-    server_name pansou.252035.xyz;
-
-    # 证书和密钥路径
-    ssl_certificate /etc/letsencrypt/live/252035.xyz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/252035.xyz/privkey.pem;
-
-    # 增强 SSL 安全性
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH;
-    ssl_prefer_server_ciphers on;
-
-    # 后端代理
-    location / {
-        proxy_pass http://127.0.0.1:9999;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+4. **分离的缓存键**：
+   - TG搜索和插件搜索使用独立的缓存键
+   - 实现独立更新，互不影响
+   - 提高缓存命中率和更新效率
