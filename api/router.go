@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
+	"pansou/config"
 	"pansou/service"
 	"pansou/util"
 )
@@ -31,15 +32,26 @@ func SetupRouter(searchService *service.SearchService) *gin.Engine {
 		
 		// 健康检查接口
 		api.GET("/health", func(c *gin.Context) {
+			// 获取插件信息
 			pluginCount := 0
+			pluginNames := []string{}
 			if searchService != nil && searchService.GetPluginManager() != nil {
-				pluginCount = len(searchService.GetPluginManager().GetPlugins())
+				plugins := searchService.GetPluginManager().GetPlugins()
+				pluginCount = len(plugins)
+				for _, p := range plugins {
+					pluginNames = append(pluginNames, p.Name())
+				}
 			}
+			
+			// 获取频道信息
+			channels := config.AppConfig.DefaultChannels
 			
 			c.JSON(200, gin.H{
 				"status": "ok",
 				"plugins_enabled": true,
 				"plugin_count": pluginCount,
+				"plugins": pluginNames,
+				"channels": channels,
 			})
 		})
 	}
