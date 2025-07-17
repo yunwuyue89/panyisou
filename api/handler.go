@@ -62,12 +62,12 @@ func SearchHandler(c *gin.Context) {
 		// 处理结果类型和来源类型
 		resultType := c.Query("res")
 		if resultType == "" || resultType == " " {
-			resultType = "" // 使用默认值
+			resultType = "merge" // 直接设置为默认值merge
 		}
 		
 		sourceType := c.Query("src")
 		if sourceType == "" || sourceType == " " {
-			sourceType = "" // 使用默认值
+			sourceType = "all" // 直接设置为默认值all
 		}
 		
 		// 处理plugins参数，支持逗号分隔
