@@ -336,9 +336,14 @@ func Clean115PanURL(url string) string {
 func CleanAliyunPanURL(url string) string {
 	// 如果URL包含阿里云盘域名，提取出正确的链接部分
 	if strings.Contains(url, "alipan.com/s/") || strings.Contains(url, "aliyundrive.com/s/") {
-		// 找到链接的起始位置
+		// 找到链接的起始位置和域名部分
 		startIdx := -1
-		if idx := strings.Index(url, "alipan.com/s/"); idx >= 0 {
+		
+		if idx := strings.Index(url, "www.alipan.com/s/"); idx >= 0 {
+			startIdx = idx
+		} else if idx := strings.Index(url, "alipan.com/s/"); idx >= 0 {
+			startIdx = idx
+		} else if idx := strings.Index(url, "www.aliyundrive.com/s/"); idx >= 0 {
 			startIdx = idx
 		} else if idx := strings.Index(url, "aliyundrive.com/s/"); idx >= 0 {
 			startIdx = idx

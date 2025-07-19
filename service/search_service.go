@@ -68,9 +68,37 @@ func NewSearchService(pluginManager *plugin.PluginManager) *SearchService {
 			}
 		}
 	}
+	
+	// 将主缓存注入到异步插件中
+	injectMainCacheToAsyncPlugins(pluginManager, enhancedTwoLevelCache)
 
 	return &SearchService{
 		pluginManager: pluginManager,
+	}
+}
+
+// injectMainCacheToAsyncPlugins 将主缓存系统注入到异步插件中
+func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCache *cache.EnhancedTwoLevelCache) {
+	// 如果缓存或插件管理器不可用，直接返回
+	if mainCache == nil || pluginManager == nil {
+		return
+	}
+	
+	// 创建缓存更新函数
+	cacheUpdater := func(key string, data []byte, ttl time.Duration) error {
+		return mainCache.Set(key, data, ttl)
+	}
+	
+	// 获取所有插件
+	plugins := pluginManager.GetPlugins()
+	
+	// 遍历所有插件，找出异步插件
+	for _, p := range plugins {
+		// 检查插件是否实现了SetMainCacheUpdater方法
+		if asyncPlugin, ok := p.(interface{ SetMainCacheUpdater(func(string, []byte, time.Duration) error) }); ok {
+			// 注入缓存更新函数
+			asyncPlugin.SetMainCacheUpdater(cacheUpdater)
+		}
 	}
 }
 
@@ -403,7 +431,7 @@ func (s *SearchService) searchChannel(keyword string, channel string) ([]model.S
 	client := util.GetHTTPClient()
 
 	// 创建一个带超时的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
 	// 创建请求
@@ -520,6 +548,7 @@ func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
+					// 直接返回缓存数据，不检查新鲜度
 					return results, nil
 				}
 			}
@@ -529,13 +558,14 @@ func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := cache.DeserializeWithPool(data, &results); err == nil {
+					// 直接返回缓存数据，不检查新鲜度
 					return results, nil
 				}
 			}
 		}
 	}
 	
-	// 缓存未命中，执行实际搜索
+	// 缓存未命中或强制刷新，执行实际搜索
 	var results []model.SearchResult
 	
 	// 使用工作池并行搜索多个频道
@@ -601,28 +631,18 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		
 		// 优先使用增强版缓存
 		if enhancedTwoLevelCache != nil {
+			// 强制删除内存缓存，确保每次都从磁盘读取最新数据
+			enhancedTwoLevelCache.Delete(cacheKey)
+			
+			// 使用Get方法，它会检查磁盘缓存是否有更新
+			// 如果磁盘缓存比内存缓存更新，会自动更新内存缓存并返回最新数据
 			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
 			
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
-					// 确保缓存数据是最新的
-					// 如果缓存数据是最近更新的（例如在过去30秒内），则直接返回
-					// 否则，我们将重新执行搜索以获取最新数据
-					if len(results) > 0 {
-						// 获取当前时间
-						now := time.Now()
-						// 检查缓存数据是否是最近更新的
-						// 这里我们假设如果缓存数据中有结果的时间戳在过去30秒内，则认为是最新的
-						for _, result := range results {
-							if !result.Datetime.IsZero() && now.Sub(result.Datetime) < 30*time.Second {
-								return results, nil
-							}
-						}
-					} else {
-						// 如果缓存中没有数据，直接返回空结果
-						return results, nil
-					}
+					// 返回缓存数据
+					return results, nil
 				}
 			}
 		} else if twoLevelCache != nil {
@@ -631,29 +651,14 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := cache.DeserializeWithPool(data, &results); err == nil {
-					// 确保缓存数据是最新的
-					// 如果缓存数据是最近更新的（例如在过去30秒内），则直接返回
-					// 否则，我们将重新执行搜索以获取最新数据
-					if len(results) > 0 {
-						// 获取当前时间
-						now := time.Now()
-						// 检查缓存数据是否是最近更新的
-						// 这里我们假设如果缓存数据中有结果的时间戳在过去30秒内，则认为是最新的
-						for _, result := range results {
-							if !result.Datetime.IsZero() && now.Sub(result.Datetime) < 30*time.Second {
-								return results, nil
-							}
-						}
-					} else {
-						// 如果缓存中没有数据，直接返回空结果
-						return results, nil
-					}
+					// 返回缓存数据
+					return results, nil
 				}
 			}
 		}
 	}
 	
-	// 缓存未命中或缓存数据不是最新的，执行实际搜索
+	// 缓存未命中或强制刷新，执行实际搜索
 	// 获取所有可用插件
 	var availablePlugins []plugin.SearchPlugin
 	if s.pluginManager != nil {

@@ -43,8 +43,11 @@ func NewEnhancedTwoLevelCache() (*EnhancedTwoLevelCache, error) {
 
 // Set 设置缓存
 func (c *EnhancedTwoLevelCache) Set(key string, data []byte, ttl time.Duration) error {
+	// 获取当前时间作为最后修改时间
+	now := time.Now()
+	
 	// 先设置内存缓存（这是快速操作，直接在当前goroutine中执行）
-	c.memory.Set(key, data, ttl)
+	c.memory.SetWithTimestamp(key, data, ttl, now)
 	
 	// 异步设置磁盘缓存（这是IO操作，可能较慢）
 	go func(k string, d []byte, t time.Duration) {
@@ -57,21 +60,19 @@ func (c *EnhancedTwoLevelCache) Set(key string, data []byte, ttl time.Duration) 
 
 // Get 获取缓存
 func (c *EnhancedTwoLevelCache) Get(key string) ([]byte, bool, error) {
-	// 优先检查内存缓存
-	if data, found := c.memory.Get(key); found {
-		return data, true, nil
-	}
-	
-	// 内存未命中，检查磁盘缓存
-	data, found, err := c.disk.Get(key)
-	if err != nil {
-		return nil, false, err
-	}
-	
-	if found {
-		// 磁盘命中，更新内存缓存
+	// 首先尝试从磁盘读取数据
+	diskData, diskHit, diskErr := c.disk.Get(key)
+	if diskErr == nil && diskHit {
+		// 磁盘缓存命中，更新内存缓存
+		diskLastModified, _ := c.disk.GetLastModified(key)
 		ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
-		c.memory.Set(key, data, ttl)
+		c.memory.SetWithTimestamp(key, diskData, ttl, diskLastModified)
+		return diskData, true, nil
+	}
+	
+	// 磁盘未命中，检查内存缓存
+	data, _, memHit := c.memory.GetWithTimestamp(key)
+	if memHit {
 		return data, true, nil
 	}
 	

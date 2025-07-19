@@ -38,7 +38,7 @@ func NewJikepanAsyncV2Plugin() *JikepanAsyncV2Plugin {
 
 // Search 执行搜索并返回结果
 func (p *JikepanAsyncV2Plugin) Search(keyword string) ([]model.SearchResult, error) {
-	// 生成缓存键
+	// 使用关键词作为缓存键，让BaseAsyncPlugin统一处理缓存键生成
 	cacheKey := keyword
 	
 	// 使用异步搜索基础方法

@@ -92,3 +92,9 @@ func (c *ShardedDiskCache) Clear() error {
 	
 	return lastErr
 } 
+
+// GetLastModified 获取缓存项的最后修改时间
+func (c *ShardedDiskCache) GetLastModified(key string) (time.Time, bool) {
+	shard := c.getShard(key)
+	return shard.GetLastModified(key)
+} 

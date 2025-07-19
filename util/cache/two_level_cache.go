@@ -9,10 +9,11 @@ import (
 
 // 简单的内存缓存项
 type memoryCacheItem struct {
-	data      []byte
-	expiry    time.Time
-	lastUsed  time.Time
-	size      int
+	data         []byte
+	expiry       time.Time
+	lastUsed     time.Time
+	lastModified time.Time // 添加最后修改时间
+	size         int
 }
 
 // 内存缓存
@@ -35,6 +36,11 @@ func NewMemoryCache(maxItems int, maxSizeMB int) *MemoryCache {
 
 // 设置缓存
 func (c *MemoryCache) Set(key string, data []byte, ttl time.Duration) {
+	c.SetWithTimestamp(key, data, ttl, time.Now())
+}
+
+// SetWithTimestamp 设置缓存，并指定最后修改时间
+func (c *MemoryCache) SetWithTimestamp(key string, data []byte, ttl time.Duration, lastModified time.Time) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -46,10 +52,11 @@ func (c *MemoryCache) Set(key string, data []byte, ttl time.Duration) {
 	// 创建新的缓存项
 	now := time.Now()
 	item := &memoryCacheItem{
-		data:     data,
-		expiry:   now.Add(ttl),
-		lastUsed: now,
-		size:     len(data),
+		data:         data,
+		expiry:       now.Add(ttl),
+		lastUsed:     now,
+		lastModified: lastModified,
+		size:         len(data),
 	}
 
 	// 检查是否需要清理空间
@@ -87,6 +94,51 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 	c.mutex.Unlock()
 
 	return item.data, true
+}
+
+// GetWithTimestamp 获取缓存及其最后修改时间
+func (c *MemoryCache) GetWithTimestamp(key string) ([]byte, time.Time, bool) {
+	c.mutex.RLock()
+	item, exists := c.items[key]
+	c.mutex.RUnlock()
+
+	if !exists {
+		return nil, time.Time{}, false
+	}
+
+	// 检查是否过期
+	if time.Now().After(item.expiry) {
+		c.mutex.Lock()
+		delete(c.items, key)
+		c.currSize -= int64(item.size)
+		c.mutex.Unlock()
+		return nil, time.Time{}, false
+	}
+
+	// 更新最后使用时间
+	c.mutex.Lock()
+	item.lastUsed = time.Now()
+	c.mutex.Unlock()
+
+	return item.data, item.lastModified, true
+}
+
+// GetLastModified 获取缓存项的最后修改时间
+func (c *MemoryCache) GetLastModified(key string) (time.Time, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	item, exists := c.items[key]
+	if !exists {
+		return time.Time{}, false
+	}
+
+	// 检查是否过期
+	if time.Now().After(item.expiry) {
+		return time.Time{}, false
+	}
+
+	return item.lastModified, true
 }
 
 // 驱逐策略 - LRU

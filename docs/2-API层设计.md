@@ -378,14 +378,60 @@ func LoggerMiddleware() gin.HandlerFunc {
 {
   "status": "ok",
   "plugins_enabled": true,
-  "plugin_count": 6
+  "plugin_count": 6,
+  "plugins": ["pansearch", "panta", "qupansou", "hunhepan", "jikepan", "pan666"],
+  "channels": ["tgsearchers2", "SharePanBaidu"]
 }
 ```
 
-## 7. 性能优化措施
+## 7. 参数处理优化
+
+### 7.1 GET请求参数处理
+
+```go
+// 处理plugins参数，支持逗号分隔
+var plugins []string
+// 检查请求中是否存在plugins参数
+if c.Request.URL.Query().Has("plugins") {
+    pluginsStr := c.Query("plugins")
+    // 判断参数是否非空
+    if pluginsStr != "" && pluginsStr != " " {
+        parts := strings.Split(pluginsStr, ",")
+        for _, part := range parts {
+            trimmed := strings.TrimSpace(part)
+            if trimmed != "" {
+                plugins = append(plugins, trimmed)
+            }
+        }
+    }
+} else {
+    // 如果请求中不存在plugins参数，设置为nil
+    plugins = nil
+}
+```
+
+### 7.2 参数互斥与规范化处理
+
+```go
+// 参数互斥逻辑：当src=tg时忽略plugins参数，当src=plugin时忽略channels参数
+if req.SourceType == "tg" {
+    req.Plugins = nil // 忽略plugins参数
+} else if req.SourceType == "plugin" {
+    req.Channels = nil // 忽略channels参数
+} else if req.SourceType == "all" {
+    // 对于all类型，如果plugins为空或不存在，统一设为nil
+    if req.Plugins == nil || len(req.Plugins) == 0 {
+        req.Plugins = nil
+    }
+}
+```
+
+## 8. 性能优化措施
 
 1. **高效参数处理**：对GET请求参数进行高效处理，避免不必要的字符串操作
 2. **高性能JSON库**：使用sonic高性能JSON库处理请求和响应
 3. **响应压缩**：通过GzipMiddleware实现响应压缩，减少传输数据量
 4. **避免内存分配**：合理使用预分配和对象池，减少内存分配和GC压力
 5. **直接写入响应体**：使用`c.Data`直接写入响应体，避免中间转换
+6. **精确参数检查**：使用`c.Request.URL.Query().Has()`检查参数是否存在，避免不必要的处理
+7. **参数统一处理**：对相同语义的不同形式参数进行统一处理，确保缓存一致性

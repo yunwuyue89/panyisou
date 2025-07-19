@@ -1,15 +1,40 @@
 # PanSou 网盘搜索API
 
-PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和网盘搜索引擎。系统设计以性能和可扩展性为核心，支持多频道并发搜索、结果智能排序和网盘类型分类。
-
+PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定义插件搜索。系统设计以性能和可扩展性为核心，支持并发搜索、结果智能排序和网盘类型分类。
 
 ## 特性
 
 - **高性能搜索**：并发搜索多个Telegram频道，显著提升搜索速度；工作池设计，高效管理并发任务
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
 - **智能排序**：基于时间和关键词权重的多级排序策略
-- **插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件；支持"尽快响应，持续处理"的异步搜索模式
-- **两级异步缓存**：内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能，即使在不强制刷新的情况下也能获取异步插件更新的最新缓存数据
+- **异步插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件，详情参考[插件开发指南.md](docs/插件开发指南.md)；支持"尽快响应，持续处理"的异步搜索模，解决了某些搜索源响应时间长的问题
+  - **双级超时控制**：短超时(4秒)确保快速响应，长超时(30秒)允许完整处理
+  - **持久化缓存**：缓存自动保存到磁盘，系统重启后自动恢复
+  - **即时保存**：缓存更新后立即触发保存，不再等待定时器
+  - **优雅关闭**：在程序退出前保存缓存，确保数据不丢失
+  - **增量更新**：智能合并新旧结果，保留有价值的数据
+  - **后台自动刷新**：对于接近过期的缓存，在后台自动刷新
+- **异步二级缓存**：内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能，即使在不强制刷新的情况下也能获取异步插件更新的最新缓存数据  
+  1. **分片磁盘缓存**：
+    - 将缓存数据分散到多个子目录，减少锁竞争
+    - 通过哈希算法将缓存键均匀分布到不同分片
+    - 提高高并发场景下的性能
+
+  2. **序列化器接口**：
+    - 统一的序列化和反序列化操作
+    - 支持Gob和JSON双序列化方式
+    - Gob序列化提供更高性能和更小的结果大小
+
+  3. **分离的缓存键**：
+    - TG搜索和插件搜索使用独立的缓存键
+    - 实现独立更新，互不影响
+    - 提高缓存命中率和更新效率
+
+  4. **优化的缓存读取策略**：
+    - 优先从磁盘读取数据，而不是优先使用内存缓存
+    - 每次查询前强制删除内存缓存，确保从磁盘读取最新数据
+    - 确保即使在不强制刷新的情况下也能获取异步插件更新的最新缓存数据
+
 
 ## 支持的网盘类型
 
@@ -26,14 +51,46 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和网盘
 - 磁力链接 (`magnet:?xt=urn:btih:`)
 - 电驴链接 (`ed2k://`)
 
-## 内置搜索插件
-
-PanSou内置了多个网盘搜索插件，可以扩展搜索来源
+## 快速开始
 
 ### 环境要求
 
 - Go 1.18+
 - 可选：SOCKS5代理（用于访问受限地区的Telegram站点）
+
+### 使用Docker部署
+
+#### 方法1：使用Docker Compose（推荐）
+
+1. 下载docker-compose.yml文件
+
+```bash
+wget https://raw.githubusercontent.com/fish2018/pansou/main/docker-compose.yml
+```
+
+2. 启动服务
+
+```bash
+docker-compose up -d
+```
+
+3. 访问服务
+
+```
+http://localhost:8888
+```
+
+#### 方法2：直接使用Docker命令
+
+```bash
+docker run -d --name pansou \
+  -p 8888:8888 \
+  -v pansou-cache:/app/cache \
+  -e CHANNELS="tgsearchers2,SharePanBaidu,yunpanxunlei" \
+  -e CACHE_ENABLED=true \
+  -e ASYNC_PLUGIN_ENABLED=true \
+  ghcr.io/fish2018/pansou:latest
+```
 
 ### 从源码安装
 
@@ -45,6 +102,29 @@ cd pansou
 ```
 
 2. 配置环境变量（可选）
+
+| 环境变量 | 描述 | 默认值 |
+|----------|------|--------|
+| CHANNELS | 默认搜索频道列表（逗号分隔） | tgsearchers2 |
+| CONCURRENCY | 默认并发数 | 频道数+插件数+10 |
+| PORT | 服务端口 | 8888 |
+| PROXY | SOCKS5代理 | - |
+| CACHE_ENABLED | 是否启用缓存 | true |
+| CACHE_PATH | 缓存文件路径 | ./cache |
+| CACHE_MAX_SIZE | 最大缓存大小(MB) | 100 |
+| CACHE_TTL | 缓存生存时间(分钟) | 60 |
+| SHARD_COUNT | 缓存分片数量 | 8 |
+| SERIALIZER_TYPE | 序列化器类型(gob/json) | gob |
+| ENABLE_COMPRESSION | 是否启用压缩 | false |
+| MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | 1024 |
+| GC_PERCENT | GC触发百分比 | 100 |
+| OPTIMIZE_MEMORY | 是否优化内存 | true |
+| PLUGIN_TIMEOUT | 插件执行超时时间(秒) | 30 |
+| ASYNC_PLUGIN_ENABLED | 是否启用异步插件 | true |
+| ASYNC_RESPONSE_TIMEOUT | 异步响应超时时间(秒) | 4 |
+| ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | 20 |
+| ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 100 |
+| ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | 1 |
 
 ```bash
 # 默认频道
@@ -59,7 +139,7 @@ export SHARD_COUNT=8       # 分片数量
 
 # 异步插件配置
 export ASYNC_PLUGIN_ENABLED=true
-export ASYNC_RESPONSE_TIMEOUT=2            # 响应超时时间（秒）
+export ASYNC_RESPONSE_TIMEOUT=4            # 响应超时时间（秒）
 export ASYNC_MAX_BACKGROUND_WORKERS=20     # 最大后台工作者数量
 export ASYNC_MAX_BACKGROUND_TASKS=100      # 最大后台任务数量
 export ASYNC_CACHE_TTL_HOURS=1             # 异步缓存有效期（小时）
@@ -78,6 +158,60 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -extldflags '-sta
 
 ```bash
 ./pansou
+```
+
+### 其他配置参考
+
+`supervisor`配置参考
+
+```
+[program:pansou]
+environment=PORT=8888,CHANNELS="SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,pan115_share,bdwpzhpd,ysxb48,pankuake_share,jdjdn1111,yggpan,yunpanall,MCPH086,zaihuayun,Q66Share,NewAliPan,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,yunpanpan,hao115,yunpanshare,dianyingshare,Quark_Movies,XiangxiuNB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,pan123pan,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,tgsearchers2,leoziyuan"
+command=/home/work/pansou/pansou
+directory=/home/work/pansou
+autostart=true
+autorestart=true
+startsecs=5
+startretries=3
+exitcodes=0
+stopwaitsecs=10
+stopasgroup=true
+killasgroup=true
+```
+
+`nginx`配置参考
+
+```
+server {
+    listen 80;
+    server_name pansou.252035.xyz;
+
+    # 将 HTTP 重定向到 HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2; # 添加 http2
+    server_name pansou.252035.xyz;
+
+    # 证书和密钥路径
+    ssl_certificate /etc/letsencrypt/live/252035.xyz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/252035.xyz/privkey.pem;
+
+    # 增强 SSL 安全性
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH;
+    ssl_prefer_server_ciphers on;
+
+    # 后端代理
+    location / {
+        proxy_pass http://127.0.0.1:8888;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
 ```
 
 ## API文档
@@ -212,84 +346,3 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
   "status": "ok"
 }
 ```
-
-## 配置指南
-
-### 环境变量
-
-| 环境变量 | 描述 | 默认值 |
-|----------|------|--------|
-| CHANNELS | 默认搜索频道列表（逗号分隔） | tgsearchers2 |
-| CONCURRENCY | 默认并发数 | 频道数+插件数+10 |
-| PORT | 服务端口 | 8888 |
-| PROXY | SOCKS5代理 | - |
-| CACHE_ENABLED | 是否启用缓存 | true |
-| CACHE_PATH | 缓存文件路径 | ./cache |
-| CACHE_MAX_SIZE | 最大缓存大小(MB) | 100 |
-| CACHE_TTL | 缓存生存时间(分钟) | 60 |
-| SHARD_COUNT | 缓存分片数量 | 8 |
-| SERIALIZER_TYPE | 序列化器类型(gob/json) | gob |
-| ENABLE_COMPRESSION | 是否启用压缩 | false |
-| MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | 1024 |
-| GC_PERCENT | GC触发百分比 | 100 |
-| OPTIMIZE_MEMORY | 是否优化内存 | true |
-| PLUGIN_TIMEOUT | 插件执行超时时间(秒) | 30 |
-| ASYNC_PLUGIN_ENABLED | 是否启用异步插件 | true |
-| ASYNC_RESPONSE_TIMEOUT | 异步响应超时时间(秒) | 4 |
-| ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | 20 |
-| ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 100 |
-| ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | 1 |
-| CACHE_FRESHNESS_SECONDS | 缓存数据新鲜度(秒) | 30 |
-
-## 性能优化
-
-PanSou 实现了多项性能优化技术：
-
-1. **JSON处理优化**：使用 sonic 高性能 JSON 库
-2. **内存优化**：预分配策略、对象池化、GC参数优化
-3. **缓存优化**：
-   - 增强版两级缓存（内存+分片磁盘）
-   - 分片磁盘缓存减少锁竞争
-   - 高效序列化（Gob和JSON双支持）
-   - 分离的缓存键（TG搜索和插件搜索独立缓存）
-   - 缓存数据时间戳检查（获取最新数据）
-   - 异步写入（不阻塞主流程）
-4. **HTTP客户端优化**：连接池、HTTP/2支持
-5. **并发优化**：工作池、智能并发控制
-6. **传输压缩**：支持 gzip 压缩
-
-## 异步插件系统
-
-PanSou实现了高级异步插件系统，解决了某些搜索源响应时间长的问题：
-
-### 异步插件特性
-
-- **双级超时控制**：短超时(4秒)确保快速响应，长超时(30秒)允许完整处理
-- **持久化缓存**：缓存自动保存到磁盘，系统重启后自动恢复
-- **即时保存**：缓存更新后立即触发保存，不再等待定时器
-- **优雅关闭**：在程序退出前保存缓存，确保数据不丢失
-- **增量更新**：智能合并新旧结果，保留有价值的数据
-- **后台自动刷新**：对于接近过期的缓存，在后台自动刷新
-- **与主程序缓存协同**：通过时间戳检查机制，确保即使在不强制刷新的情况下也能获取最新缓存数据
-
-### 缓存系统特点
-
-1. **分片磁盘缓存**：
-   - 将缓存数据分散到多个子目录，减少锁竞争
-   - 通过哈希算法将缓存键均匀分布到不同分片
-   - 提高高并发场景下的性能
-
-2. **序列化器接口**：
-   - 统一的序列化和反序列化操作
-   - 支持Gob和JSON双序列化方式
-   - Gob序列化提供更高性能和更小的结果大小
-
-3. **缓存数据时间戳检查**：
-   - 检查缓存数据是否是最新的（30秒内更新）
-   - 确保获取异步插件在后台更新的最新缓存数据
-   - 在不强制刷新的情况下也能获取最新数据
-
-4. **分离的缓存键**：
-   - TG搜索和插件搜索使用独立的缓存键
-   - 实现独立更新，互不影响
-   - 提高缓存命中率和更新效率

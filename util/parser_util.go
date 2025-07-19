@@ -124,16 +124,16 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 	var nextPageParam string
 
 	// 查找分页链接 - 使用next而不是prev来获取下一页
-	doc.Find("link[rel='next']").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if exists {
-			// 从href中提取before参数
-			parts := strings.Split(href, "before=")
-			if len(parts) > 1 {
-				nextPageParam = strings.Split(parts[1], "&")[0]
-			}
-		}
-	})
+	// doc.Find("link[rel='next']").Each(func(i int, s *goquery.Selection) {
+	// 	href, exists := s.Attr("href")
+	// 	if exists {
+	// 		// 从href中提取before参数
+	// 		parts := strings.Split(href, "before=")
+	// 		if len(parts) > 1 {
+	// 			nextPageParam = strings.Split(parts[1], "&")[0]
+	// 		}
+	// 	}
+	// })
 
 	// 查找消息块
 	doc.Find(".tgme_widget_message_wrap").Each(func(i int, s *goquery.Selection) {
@@ -284,11 +284,11 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 					// 非特殊处理的网盘链接直接添加
 					if !foundLinks[href] {
 						foundLinks[href] = true
-				links = append(links, model.Link{
-					Type:     linkType,
-					URL:      href,
-					Password: password,
-				})
+						links = append(links, model.Link{
+							Type:     linkType,
+							URL:      href,
+							Password: password,
+						})
 					}
 				}
 			}

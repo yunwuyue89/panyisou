@@ -2,12 +2,16 @@ package plugin
 
 import (
 	"compress/gzip"
+	"crypto/md5"
 	"encoding/gob"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -457,6 +461,7 @@ type BaseAsyncPlugin struct {
 	client            *http.Client  // 用于短超时的客户端
 	backgroundClient  *http.Client  // 用于长超时的客户端
 	cacheTTL          time.Duration // 缓存有效期
+	mainCacheUpdater  func(string, []byte, time.Duration) error // 主缓存更新函数
 }
 
 // NewBaseAsyncPlugin 创建基础异步插件
@@ -491,6 +496,11 @@ func NewBaseAsyncPlugin(name string, priority int) *BaseAsyncPlugin {
 	}
 }
 
+// SetMainCacheUpdater 设置主缓存更新函数
+func (p *BaseAsyncPlugin) SetMainCacheUpdater(updater func(string, []byte, time.Duration) error) {
+	p.mainCacheUpdater = updater
+}
+
 // Name 返回插件名称
 func (p *BaseAsyncPlugin) Name() string {
 	return p.name
@@ -509,8 +519,18 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 ) ([]model.SearchResult, error) {
 	now := time.Now()
 	
+	// 生成标准缓存键，用于主缓存系统
+	// 使用与cache.GeneratePluginCacheKey完全相同的格式
+	normalizedKeyword := strings.ToLower(strings.TrimSpace(keyword))
+	
+	// 使用nil作为plugins参数，表示使用所有插件
+	// 这与cache.GeneratePluginCacheKey(keyword, nil)的行为相同
+	keyStr := fmt.Sprintf("plugin:%s:all", normalizedKeyword)
+	hash := md5.Sum([]byte(keyStr))
+	mainCacheKey := hex.EncodeToString(hash[:])
+	
 	// 修改缓存键，确保包含插件名称
-	pluginSpecificCacheKey := fmt.Sprintf("%s:%s", p.name, cacheKey)
+	pluginSpecificCacheKey := fmt.Sprintf("%s:%s", p.name, keyword)
 	
 	// 检查缓存
 	if cachedItems, ok := apiResponseCache.Load(pluginSpecificCacheKey); ok {
@@ -523,7 +543,7 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 			
 			// 如果缓存接近过期（已用时间超过TTL的80%），在后台刷新缓存
 			if time.Since(cachedResult.Timestamp) > (p.cacheTTL * 4 / 5) {
-				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult)
+				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult, mainCacheKey)
 			}
 			
 			return cachedResult.Results, nil
@@ -537,7 +557,7 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 			// 标记为部分过期
 			if time.Since(cachedResult.Timestamp) >= p.cacheTTL {
 				// 在后台刷新缓存
-				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult)
+				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult, mainCacheKey)
 				
 				// 日志记录
 				fmt.Printf("[%s] 缓存已过期，后台刷新中: %s (已过期: %v)\n", 
@@ -582,6 +602,10 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 				LastAccess:  now,
 				AccessCount: 1,
 			})
+			
+			// 更新主缓存系统
+			p.updateMainCache(mainCacheKey, results)
+			
 			return
 		}
 		defer releaseWorkerSlot()
@@ -639,6 +663,9 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 				})
 				recordAsyncCompletion()
 				
+				// 更新主缓存系统
+				p.updateMainCache(mainCacheKey, results)
+				
 				// 更新缓存后立即触发保存
 				go saveCacheToDisk()
 			}
@@ -689,6 +716,9 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 					LastAccess:  now,
 					AccessCount: 1,
 				})
+				
+				// 更新主缓存系统
+				p.updateMainCache(mainCacheKey, results)
 				
 				// 更新缓存后立即触发保存
 				go saveCacheToDisk()
@@ -748,6 +778,7 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 	cacheKey string,
 	searchFunc func(*http.Client, string) ([]model.SearchResult, error),
 	oldCache cachedResponse,
+	originalCacheKey string,
 ) {
 	// 注意：这里的cacheKey已经是插件特定的了，因为是从AsyncSearch传入的
 	
@@ -792,6 +823,10 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 		AccessCount: oldCache.AccessCount,
 	})
 	
+	// 更新主缓存系统
+	// 使用传入的原始缓存键，而不是尝试处理cacheKey
+	p.updateMainCache(originalCacheKey, mergedResults)
+	
 	// 记录刷新时间
 	refreshTime := time.Since(refreshStart)
 	fmt.Printf("[%s] 后台刷新完成: %s (耗时: %v, 新项目: %d, 合并项目: %d)\n", 
@@ -799,4 +834,29 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 	
 	// 更新缓存后立即触发保存
 	go saveCacheToDisk()
+} 
+
+// updateMainCache 更新主缓存系统
+func (p *BaseAsyncPlugin) updateMainCache(cacheKey string, results []model.SearchResult) {
+	// 如果主缓存更新函数为空，直接返回
+	if p.mainCacheUpdater == nil {
+		return
+	}
+	
+	// 直接使用传入的cacheKey作为主缓存的键
+	mainCacheKey := cacheKey
+	
+	// 序列化结果
+	data, err := json.Marshal(results)
+	if err != nil {
+		fmt.Printf("[%s] 序列化结果失败: %v\n", p.name, err)
+		return
+	}
+	
+	// 调用主缓存更新函数
+	if err := p.mainCacheUpdater(mainCacheKey, data, p.cacheTTL); err != nil {
+		fmt.Printf("[%s] 更新主缓存失败: %v\n", p.name, err)
+	} else {
+		fmt.Printf("[%s] 成功更新主缓存: %s\n", p.name, mainCacheKey)
+	}
 } 

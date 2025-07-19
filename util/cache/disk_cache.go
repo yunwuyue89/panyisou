@@ -14,10 +14,11 @@ import (
 
 // 磁盘缓存项元数据
 type diskCacheMetadata struct {
-	Key      string    `json:"key"`
-	Expiry   time.Time `json:"expiry"`
-	LastUsed time.Time `json:"last_used"`
-	Size     int       `json:"size"`
+	Key         string    `json:"key"`
+	Expiry      time.Time `json:"expiry"`
+	LastUsed    time.Time `json:"last_used"`
+	Size        int       `json:"size"`
+	LastModified time.Time `json:"last_modified"` // 添加最后修改时间字段
 }
 
 // DiskCache 磁盘缓存
@@ -141,10 +142,11 @@ func (c *DiskCache) Set(key string, data []byte, ttl time.Duration) error {
 	// 创建元数据
 	now := time.Now()
 	meta := &diskCacheMetadata{
-		Key:      key,
-		Expiry:   now.Add(ttl),
-		LastUsed: now,
-		Size:     len(data),
+		Key:         key,
+		Expiry:      now.Add(ttl),
+		LastUsed:    now,
+		LastModified: now, // 设置最后修改时间
+		Size:        len(data),
 	}
 
 	// 保存元数据
@@ -339,4 +341,17 @@ func (c *DiskCache) Clear() error {
 	c.currSize = 0
 
 	return nil
+} 
+
+// GetLastModified 获取缓存项的最后修改时间
+func (c *DiskCache) GetLastModified(key string) (time.Time, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	meta, exists := c.metadata[key]
+	if !exists {
+		return time.Time{}, false
+	}
+
+	return meta.LastModified, true
 } 
