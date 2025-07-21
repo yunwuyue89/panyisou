@@ -44,11 +44,8 @@ func NewHunhepanAsyncPlugin() *HunhepanAsyncPlugin {
 
 // Search 执行搜索并返回结果
 func (p *HunhepanAsyncPlugin) Search(keyword string) ([]model.SearchResult, error) {
-	// 使用关键词作为缓存键，让BaseAsyncPlugin统一处理缓存键生成
-	cacheKey := keyword
-	
-	// 使用异步搜索基础方法
-	return p.AsyncSearch(keyword, cacheKey, p.doSearch)
+	// 使用保存的主缓存键
+	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey)
 }
 
 // doSearch 实际的搜索实现

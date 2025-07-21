@@ -57,11 +57,8 @@ func NewPan666AsyncPlugin() *Pan666AsyncPlugin {
 
 // Search 执行搜索并返回结果
 func (p *Pan666AsyncPlugin) Search(keyword string) ([]model.SearchResult, error) {
-	// 使用关键词作为缓存键，让BaseAsyncPlugin统一处理缓存键生成
-	cacheKey := keyword
-	
-	// 使用异步搜索基础方法
-	return p.AsyncSearch(keyword, cacheKey, p.doSearch)
+	// 使用保存的主缓存键
+	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey)
 }
 
 // doSearch 实际的搜索实现
@@ -78,7 +75,10 @@ func (p *Pan666AsyncPlugin) doSearch(client *http.Client, keyword string) ([]mod
 	// 去重
 	uniqueResults := p.deduplicateResults(allResults)
 	
-	return uniqueResults, nil
+	// 使用过滤功能过滤结果
+	filteredResults := p.FilterResultsByKeyword(uniqueResults, keyword)
+	
+	return filteredResults, nil
 }
 
 // fetchBatch 获取一批页面的数据

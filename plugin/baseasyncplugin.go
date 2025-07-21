@@ -2,9 +2,7 @@ package plugin
 
 import (
 	"compress/gzip"
-	"crypto/md5"
 	"encoding/gob"
-	"encoding/hex"
 	"pansou/util/json"
 	"fmt"
 	"net/http"
@@ -15,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"math/rand"
 
 	"pansou/config"
 	"pansou/model"
@@ -43,6 +42,9 @@ var (
 	// 初始化标志
 	initialized       bool = false
 	initLock          sync.Mutex
+	
+	// 缓存保存锁，防止并发保存导致的竞态条件
+	saveCacheLock     sync.Mutex
 	
 	// 默认配置值
 	defaultAsyncResponseTimeout = 4 * time.Second
@@ -258,6 +260,10 @@ func getCachePath() string {
 
 // saveCacheToDisk 将缓存保存到磁盘
 func saveCacheToDisk() {
+	// 使用互斥锁确保同一时间只有一个goroutine可以执行
+	saveCacheLock.Lock()
+	defer saveCacheLock.Unlock()
+	
 	cacheFile := getCachePath()
 	lastCacheSaveTime = time.Now()
 	
@@ -462,6 +468,7 @@ type BaseAsyncPlugin struct {
 	backgroundClient  *http.Client  // 用于长超时的客户端
 	cacheTTL          time.Duration // 缓存有效期
 	mainCacheUpdater  func(string, []byte, time.Duration) error // 主缓存更新函数
+	MainCacheKey      string        // 主缓存键，导出字段
 }
 
 // NewBaseAsyncPlugin 创建基础异步插件
@@ -496,6 +503,11 @@ func NewBaseAsyncPlugin(name string, priority int) *BaseAsyncPlugin {
 	}
 }
 
+// SetMainCacheKey 设置主缓存键
+func (p *BaseAsyncPlugin) SetMainCacheKey(key string) {
+	p.MainCacheKey = key
+}
+
 // SetMainCacheUpdater 设置主缓存更新函数
 func (p *BaseAsyncPlugin) SetMainCacheUpdater(updater func(string, []byte, time.Duration) error) {
 	p.mainCacheUpdater = updater
@@ -514,20 +526,10 @@ func (p *BaseAsyncPlugin) Priority() int {
 // AsyncSearch 异步搜索基础方法
 func (p *BaseAsyncPlugin) AsyncSearch(
 	keyword string,
-	cacheKey string,
 	searchFunc func(*http.Client, string) ([]model.SearchResult, error),
+	mainCacheKey string, // 主缓存key参数
 ) ([]model.SearchResult, error) {
 	now := time.Now()
-	
-	// 生成标准缓存键，用于主缓存系统
-	// 使用与cache.GeneratePluginCacheKey完全相同的格式
-	normalizedKeyword := strings.ToLower(strings.TrimSpace(keyword))
-	
-	// 使用nil作为plugins参数，表示使用所有插件
-	// 这与cache.GeneratePluginCacheKey(keyword, nil)的行为相同
-	keyStr := fmt.Sprintf("plugin:%s:all", normalizedKeyword)
-	hash := md5.Sum([]byte(keyStr))
-	mainCacheKey := hex.EncodeToString(hash[:])
 	
 	// 修改缓存键，确保包含插件名称
 	pluginSpecificCacheKey := fmt.Sprintf("%s:%s", p.name, keyword)
@@ -648,9 +650,6 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 						
 						// 使用合并结果
 						results = mergedResults
-						
-						// 日志记录
-						// fmt.Printf("[%s] 增量更新缓存: %s (新项目: %d, 合并项目: %d)\n", p.name, pluginSpecificCacheKey, len(existingIDs), len(mergedResults))
 					}
 				}
 				
@@ -824,7 +823,7 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 	})
 	
 	// 更新主缓存系统
-	// 使用传入的原始缓存键，而不是尝试处理cacheKey
+	// 使用传入的originalCacheKey，直接传递给updateMainCache
 	p.updateMainCache(originalCacheKey, mergedResults)
 	
 	// 记录刷新时间
@@ -832,19 +831,19 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 	fmt.Printf("[%s] 后台刷新完成: %s (耗时: %v, 新项目: %d, 合并项目: %d)\n", 
 		p.name, cacheKey, refreshTime, len(results), len(mergedResults))
 	
+	// 添加随机延迟，避免多个goroutine同时调用saveCacheToDisk
+	time.Sleep(time.Duration(100+rand.Intn(500)) * time.Millisecond)
+	
 	// 更新缓存后立即触发保存
 	go saveCacheToDisk()
 } 
 
 // updateMainCache 更新主缓存系统
 func (p *BaseAsyncPlugin) updateMainCache(cacheKey string, results []model.SearchResult) {
-	// 如果主缓存更新函数为空，直接返回
-	if p.mainCacheUpdater == nil {
+	// 如果主缓存更新函数为空或缓存键为空，直接返回
+	if p.mainCacheUpdater == nil || cacheKey == "" {
 		return
 	}
-	
-	// 直接使用传入的cacheKey作为主缓存的键
-	mainCacheKey := cacheKey
 	
 	// 序列化结果
 	data, err := json.Marshal(results)
@@ -854,9 +853,52 @@ func (p *BaseAsyncPlugin) updateMainCache(cacheKey string, results []model.Searc
 	}
 	
 	// 调用主缓存更新函数
-	if err := p.mainCacheUpdater(mainCacheKey, data, p.cacheTTL); err != nil {
+	if err := p.mainCacheUpdater(cacheKey, data, p.cacheTTL); err != nil {
 		fmt.Printf("[%s] 更新主缓存失败: %v\n", p.name, err)
 	} else {
-		fmt.Printf("[%s] 成功更新主缓存: %s\n", p.name, mainCacheKey)
+		fmt.Printf("[%s] 成功更新主缓存: %s\n", p.name, cacheKey)
 	}
+} 
+
+// FilterResultsByKeyword 根据关键词过滤搜索结果
+func (p *BaseAsyncPlugin) FilterResultsByKeyword(results []model.SearchResult, keyword string) []model.SearchResult {
+	if keyword == "" {
+		return results
+	}
+	
+	// 预估过滤后会保留80%的结果
+	filteredResults := make([]model.SearchResult, 0, len(results)*8/10)
+
+	// 将关键词转为小写，用于不区分大小写的比较
+	lowerKeyword := strings.ToLower(keyword)
+
+	// 将关键词按空格分割，用于支持多关键词搜索
+	keywords := strings.Fields(lowerKeyword)
+
+	for _, result := range results {
+		// 将标题和内容转为小写
+		lowerTitle := strings.ToLower(result.Title)
+		lowerContent := strings.ToLower(result.Content)
+
+		// 检查每个关键词是否在标题或内容中
+		matched := true
+		for _, kw := range keywords {
+			// 对于所有关键词，检查是否在标题或内容中
+			if !strings.Contains(lowerTitle, kw) && !strings.Contains(lowerContent, kw) {
+				matched = false
+				break
+			}
+		}
+
+		if matched {
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	return filteredResults
+} 
+
+// GetClient 返回短超时客户端
+func (p *BaseAsyncPlugin) GetClient() *http.Client {
+	return p.client
 } 

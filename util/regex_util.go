@@ -560,6 +560,10 @@ func ExtractNetDiskLinks(text string) []string {
 	for _, match := range baiduMatches {
 		// 清理并添加百度网盘链接
 		cleanURL := CleanBaiduPanURL(match)
+		// 确保链接末尾不包含https
+		if strings.HasSuffix(cleanURL, "https") {
+			cleanURL = cleanURL[:len(cleanURL)-5]
+		}
 		if cleanURL != "" {
 			links = append(links, cleanURL)
 		}
@@ -570,6 +574,10 @@ func ExtractNetDiskLinks(text string) []string {
 	for _, match := range tianyiMatches {
 		// 清理并添加天翼云盘链接
 		cleanURL := CleanTianyiPanURL(match)
+		// 确保链接末尾不包含https
+		if strings.HasSuffix(cleanURL, "https") {
+			cleanURL = cleanURL[:len(cleanURL)-5]
+		}
 		if cleanURL != "" {
 			links = append(links, cleanURL)
 		}
@@ -580,6 +588,10 @@ func ExtractNetDiskLinks(text string) []string {
 	for _, match := range ucMatches {
 		// 清理并添加UC网盘链接
 		cleanURL := CleanUCPanURL(match)
+		// 确保链接末尾不包含https
+		if strings.HasSuffix(cleanURL, "https") {
+			cleanURL = cleanURL[:len(cleanURL)-5]
+		}
 		if cleanURL != "" {
 			links = append(links, cleanURL)
 		}
@@ -590,6 +602,10 @@ func ExtractNetDiskLinks(text string) []string {
 	for _, match := range pan123Matches {
 		// 清理并添加123网盘链接
 		cleanURL := Clean123PanURL(match)
+		// 确保链接末尾不包含https
+		if strings.HasSuffix(cleanURL, "https") {
+			cleanURL = cleanURL[:len(cleanURL)-5]
+		}
 		if cleanURL != "" {
 			// 检查是否已经存在相同的链接（比较完整URL）
 			isDuplicate := false
@@ -615,6 +631,10 @@ func ExtractNetDiskLinks(text string) []string {
 	for _, match := range pan115Matches {
 		// 清理并添加115网盘链接
 		cleanURL := Clean115PanURL(match) // 115网盘链接的清理逻辑与123网盘类似
+		// 确保链接末尾不包含https
+		if strings.HasSuffix(cleanURL, "https") {
+			cleanURL = cleanURL[:len(cleanURL)-5]
+		}
 		if cleanURL != "" {
 			// 检查是否已经存在相同的链接（比较完整URL）
 			isDuplicate := false
@@ -640,6 +660,10 @@ func ExtractNetDiskLinks(text string) []string {
 		for _, match := range aliyunMatches {
 			// 清理并添加阿里云盘链接
 			cleanURL := CleanAliyunPanURL(match)
+			// 确保链接末尾不包含https
+			if strings.HasSuffix(cleanURL, "https") {
+				cleanURL = cleanURL[:len(cleanURL)-5]
+			}
 			if cleanURL != "" {
 				// 检查是否已经存在相同的链接
 				isDuplicate := false
@@ -664,17 +688,22 @@ func ExtractNetDiskLinks(text string) []string {
 	quarkLinks := QuarkPanPattern.FindAllString(text, -1)
 	if quarkLinks != nil {
 		for _, match := range quarkLinks {
+			// 确保链接末尾不包含https
+			cleanURL := match
+			if strings.HasSuffix(cleanURL, "https") {
+				cleanURL = cleanURL[:len(cleanURL)-5]
+			}
 			// 检查是否已经存在相同的链接
 			isDuplicate := false
 			for _, existingLink := range links {
-				if strings.Contains(existingLink, match) || strings.Contains(match, existingLink) {
+				if strings.Contains(existingLink, cleanURL) || strings.Contains(cleanURL, existingLink) {
 					isDuplicate = true
 					break
 				}
 			}
 			
 			if !isDuplicate {
-				links = append(links, match)
+				links = append(links, cleanURL)
 			}
 		}
 	}
@@ -683,17 +712,22 @@ func ExtractNetDiskLinks(text string) []string {
 	xunleiLinks := XunleiPanPattern.FindAllString(text, -1)
 	if xunleiLinks != nil {
 		for _, match := range xunleiLinks {
+			// 确保链接末尾不包含https
+			cleanURL := match
+			if strings.HasSuffix(cleanURL, "https") {
+				cleanURL = cleanURL[:len(cleanURL)-5]
+			}
 			// 检查是否已经存在相同的链接
 			isDuplicate := false
 			for _, existingLink := range links {
-				if strings.Contains(existingLink, match) || strings.Contains(match, existingLink) {
+				if strings.Contains(existingLink, cleanURL) || strings.Contains(cleanURL, existingLink) {
 					isDuplicate = true
 					break
 				}
 			}
 			
 			if !isDuplicate {
-				links = append(links, match)
+				links = append(links, cleanURL)
 			}
 		}
 	}
@@ -703,25 +737,30 @@ func ExtractNetDiskLinks(text string) []string {
 	if otherLinks != nil {
 		// 过滤掉已经添加过的链接
 		for _, link := range otherLinks {
+			// 确保链接末尾不包含https
+			cleanURL := link
+			if strings.HasSuffix(cleanURL, "https") {
+				cleanURL = cleanURL[:len(cleanURL)-5]
+			}
 			// 跳过百度、夸克、迅雷、天翼、UC和123网盘链接，因为已经单独处理过
-			if strings.Contains(link, "pan.baidu.com") || 
-			   strings.Contains(link, "pan.quark.cn") || 
-			   strings.Contains(link, "pan.xunlei.com") ||
-			   strings.Contains(link, "cloud.189.cn") ||
-			   strings.Contains(link, "drive.uc.cn") ||
-			   strings.Contains(link, "123684.com") ||
-			   strings.Contains(link, "123685.com") ||
-			   strings.Contains(link, "123912.com") ||
-			   strings.Contains(link, "123pan.com") ||
-			   strings.Contains(link, "123pan.cn") ||
-			   strings.Contains(link, "123592.com") {
+			if strings.Contains(cleanURL, "pan.baidu.com") || 
+			   strings.Contains(cleanURL, "pan.quark.cn") || 
+			   strings.Contains(cleanURL, "pan.xunlei.com") ||
+			   strings.Contains(cleanURL, "cloud.189.cn") ||
+			   strings.Contains(cleanURL, "drive.uc.cn") ||
+			   strings.Contains(cleanURL, "123684.com") ||
+			   strings.Contains(cleanURL, "123685.com") ||
+			   strings.Contains(cleanURL, "123912.com") ||
+			   strings.Contains(cleanURL, "123pan.com") ||
+			   strings.Contains(cleanURL, "123pan.cn") ||
+			   strings.Contains(cleanURL, "123592.com") {
 				continue
 			}
 			
 			isDuplicate := false
 			for _, existingLink := range links {
 				normalizedExisting := normalizeURLForComparison(existingLink)
-				normalizedNew := normalizeURLForComparison(link)
+				normalizedNew := normalizeURLForComparison(cleanURL)
 				
 				// 使用完整URL比较，包括www.前缀
 				if normalizedExisting == normalizedNew || 
@@ -733,7 +772,7 @@ func ExtractNetDiskLinks(text string) []string {
 			}
 			
 			if !isDuplicate {
-				links = append(links, link)
+				links = append(links, cleanURL)
 			}
 		}
 	}

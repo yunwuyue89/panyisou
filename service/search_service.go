@@ -1,9 +1,9 @@
 package service
 
 import (
-	"context" // Added for context.WithTimeout
+	"context"
 	"io/ioutil"
-	"net/http" // Added for http.Client
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +14,7 @@ import (
 	"pansou/util"
 	"pansou/util/cache"
 	"pansou/util/pool"
-	"sync" // Added for sync.WaitGroup
+	"sync"
 )
 
 // 优先关键词列表
@@ -188,7 +188,6 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 			tgResults, tgErr = s.searchTG(keyword, channels, forceRefresh)
 		}()
 	}
-	
 	// 如果需要搜索插件
 	if sourceType == "all" || sourceType == "plugin" {
 		wg.Add(1)
@@ -214,15 +213,12 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 	// 合并结果
 	allResults := mergeSearchResults(tgResults, pluginResults)
 
-	// 过滤结果，确保标题包含搜索关键词
-	filteredResults := filterResultsByKeyword(allResults, keyword)
-
 	// 按照优化后的规则排序结果
-	sortResultsByTimeAndKeywords(filteredResults)
+	sortResultsByTimeAndKeywords(allResults)
 
 	// 过滤结果，只保留有时间的结果或包含优先关键词的结果到Results中
-	filteredForResults := make([]model.SearchResult, 0, len(filteredResults))
-	for _, result := range filteredResults {
+	filteredForResults := make([]model.SearchResult, 0, len(allResults))
+	for _, result := range allResults {
 		// 有时间的结果或包含优先关键词的结果保留在Results中
 		if !result.Datetime.IsZero() || getKeywordPriority(result.Title) > 0 {
 			filteredForResults = append(filteredForResults, result)
@@ -230,7 +226,7 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 	}
 
 	// 合并链接按网盘类型分组（使用所有过滤后的结果）
-	mergedLinks := mergeResultsByType(filteredResults)
+	mergedLinks := mergeResultsByType(allResults)
 
 	// 构建响应
 	var total int
@@ -282,64 +278,6 @@ func filterResponseByType(response model.SearchResponse, resultType string) mode
 			Results:      nil,
 		}
 	}
-}
-
-// 过滤结果，确保标题包含搜索关键词
-func filterResultsByKeyword(results []model.SearchResult, keyword string) []model.SearchResult {
-	// 预估过滤后会保留80%的结果
-	filteredResults := make([]model.SearchResult, 0, len(results)*8/10)
-
-	// 将关键词转为小写，用于不区分大小写的比较
-	lowerKeyword := strings.ToLower(keyword)
-
-	// 将关键词按空格分割，用于支持多关键词搜索
-	keywords := strings.Fields(lowerKeyword)
-
-	for _, result := range results {
-		// 将标题和内容转为小写
-		lowerTitle := strings.ToLower(result.Title)
-		lowerContent := strings.ToLower(result.Content)
-
-		// 检查每个关键词是否在标题或内容中
-		matched := true
-		for _, kw := range keywords {
-			// 如果关键词是"pwd"，特殊处理，只要标题、内容或链接中包含即可
-			if kw == "pwd" {
-				// 检查标题、内容
-				pwdInTitle := strings.Contains(lowerTitle, kw)
-				pwdInContent := strings.Contains(lowerContent, kw)
-
-				// 检查链接中是否包含pwd参数
-				pwdInLinks := false
-				for _, link := range result.Links {
-					if strings.Contains(strings.ToLower(link.URL), "pwd=") {
-						pwdInLinks = true
-						break
-					}
-				}
-
-				// 只要有一个包含pwd，就算匹配
-				if pwdInTitle || pwdInContent || pwdInLinks {
-					continue // 匹配成功，检查下一个关键词
-				} else {
-					matched = false
-					break
-				}
-			} else {
-				// 对于其他关键词，检查是否同时在标题和内容中
-				if !strings.Contains(lowerTitle, kw) && !strings.Contains(lowerContent, kw) {
-					matched = false
-					break
-				}
-			}
-		}
-
-		if matched {
-			filteredResults = append(filteredResults, result)
-		}
-	}
-
-	return filteredResults
 }
 
 // 根据时间和关键词排序结果
@@ -631,8 +569,6 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		
 		// 优先使用增强版缓存
 		if enhancedTwoLevelCache != nil {
-			// 强制删除内存缓存，确保每次都从磁盘读取最新数据
-			enhancedTwoLevelCache.Delete(cacheKey)
 			
 			// 使用Get方法，它会检查磁盘缓存是否有更新
 			// 如果磁盘缓存比内存缓存更新，会自动更新内存缓存并返回最新数据
@@ -710,11 +646,32 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 	for _, p := range availablePlugins {
 		plugin := p // 创建副本，避免闭包问题
 		tasks = append(tasks, func() interface{} {
-			results, err := plugin.Search(keyword)
-			if err != nil {
-				return nil
+			// 检查插件是否为异步插件
+			if asyncPlugin, ok := plugin.(interface {
+				AsyncSearch(keyword string, searchFunc func(*http.Client, string) ([]model.SearchResult, error), mainCacheKey string) ([]model.SearchResult, error)
+				SetMainCacheKey(string)
+			}); ok {
+				// 先设置主缓存键
+				asyncPlugin.SetMainCacheKey(cacheKey)
+				
+				// 是异步插件，调用AsyncSearch方法并传递主缓存键
+				results, err := asyncPlugin.AsyncSearch(keyword, func(client *http.Client, kw string) ([]model.SearchResult, error) {
+					// 这里使用插件的Search方法作为搜索函数
+					return plugin.Search(kw)
+				}, cacheKey)
+				
+				if err != nil {
+					return nil
+				}
+				return results
+			} else {
+				// 不是异步插件，直接调用Search方法
+				results, err := plugin.Search(keyword)
+				if err != nil {
+					return nil
+				}
+				return results
 			}
-			return results
 		})
 	}
 	

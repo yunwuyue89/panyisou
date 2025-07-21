@@ -60,7 +60,14 @@ func (c *EnhancedTwoLevelCache) Set(key string, data []byte, ttl time.Duration) 
 
 // Get 获取缓存
 func (c *EnhancedTwoLevelCache) Get(key string) ([]byte, bool, error) {
-	// 首先尝试从磁盘读取数据
+	
+	// 检查内存缓存
+	data, _, memHit := c.memory.GetWithTimestamp(key)
+	if memHit {
+		return data, true, nil
+	}
+
+    // 尝试从磁盘读取数据
 	diskData, diskHit, diskErr := c.disk.Get(key)
 	if diskErr == nil && diskHit {
 		// 磁盘缓存命中，更新内存缓存
@@ -68,12 +75,6 @@ func (c *EnhancedTwoLevelCache) Get(key string) ([]byte, bool, error) {
 		ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
 		c.memory.SetWithTimestamp(key, diskData, ttl, diskLastModified)
 		return diskData, true, nil
-	}
-	
-	// 磁盘未命中，检查内存缓存
-	data, _, memHit := c.memory.GetWithTimestamp(key)
-	if memHit {
-		return data, true, nil
 	}
 	
 	return nil, false, nil

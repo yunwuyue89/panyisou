@@ -297,7 +297,15 @@ func (p *PantaPlugin) Search(keyword string) ([]model.SearchResult, error) {
 	}
 	
 	// 解析搜索结果
-	return p.parseSearchResults(doc)
+	results, err := p.parseSearchResults(doc)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 使用过滤功能过滤结果
+	filteredResults := plugin.FilterResultsByKeyword(results, keyword)
+	
+	return filteredResults, nil
 }
 
 // parseSearchResults 使用goquery解析搜索结果
