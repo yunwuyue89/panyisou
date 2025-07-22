@@ -514,7 +514,7 @@ func (p *PanSearchPlugin) getBaseURL() (string, error) {
 }
 
 // Search 执行搜索并返回结果
-func (p *PanSearchPlugin) Search(keyword string) ([]model.SearchResult, error) {
+func (p *PanSearchPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 生成缓存键
 	cacheKey := keyword
 	

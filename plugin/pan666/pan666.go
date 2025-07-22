@@ -50,19 +50,19 @@ type Pan666AsyncPlugin struct {
 // NewPan666AsyncPlugin 创建新的pan666异步插件
 func NewPan666AsyncPlugin() *Pan666AsyncPlugin {
 	return &Pan666AsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pan666", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pan666", 4),
 		retries:         MaxRetries,
 	}
 }
 
 // Search 执行搜索并返回结果
-func (p *Pan666AsyncPlugin) Search(keyword string) ([]model.SearchResult, error) {
-	// 使用保存的主缓存键
-	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey)
+func (p *Pan666AsyncPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 使用保存的主缓存键，传递ext参数但不使用
+	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey, ext)
 }
 
 // doSearch 实际的搜索实现
-func (p *Pan666AsyncPlugin) doSearch(client *http.Client, keyword string) ([]model.SearchResult, error) {
+func (p *Pan666AsyncPlugin) doSearch(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 初始化随机数种子
 	rand.Seed(time.Now().UnixNano())
 	

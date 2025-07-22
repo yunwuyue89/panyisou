@@ -7,12 +7,13 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 - **高性能搜索**：并发搜索多个Telegram频道，显著提升搜索速度；工作池设计，高效管理并发任务
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
 - **智能排序**：基于时间和关键词权重的多级排序策略
-- **异步插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件，详情参考[插件开发指南.md](docs/插件开发指南.md)；支持"尽快响应，持续处理"的异步搜索模，解决了某些搜索源响应时间长的问题
+- **异步插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件，详情参考[插件开发指南.md](docs/插件开发指南.md)；支持"尽快响应，持续处理"的异步搜索模式，解决了某些搜索源响应时间长的问题
   - **双级超时控制**：短超时(4秒)确保快速响应，长超时(30秒)允许完整处理
   - **持久化缓存**：缓存自动保存到磁盘，系统重启后自动恢复
   - **优雅关闭**：在程序退出前保存缓存，确保数据不丢失
   - **增量更新**：智能合并新旧结果，保留有价值的数据
   - **主动更新**：异步插件在缓存异步更新后会主动更新主缓存(内存+磁盘)，使用户在不强制刷新的情况下也能获取最新数据
+- **插件扩展参数**：通过ext参数向插件传递自定义搜索参数，如英文标题、全量搜索标志等，提高搜索灵活性和精确度
 - **二级缓存**：内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能  
   - **分片磁盘缓存**：将缓存数据分散到多个子目录，减少锁竞争，通过哈希算法将缓存键均匀分布到不同分片，提高高并发场景下的性能
   - **序列化器接口**：Gob序列化提供更高性能和更小的结果大小
@@ -218,6 +219,7 @@ server {
 | res | string | 否 | 结果类型：all(返回所有结果)、results(仅返回results)、merge(仅返回merged_by_type)，默认为merge |
 | src | string | 否 | 数据来源类型：all(默认，全部来源)、tg(仅Telegram)、plugin(仅插件) |
 | plugins | string[] | 否 | 指定搜索的插件列表，不指定则搜索全部插件 |
+| ext | object | 否 | 扩展参数，用于传递给插件的自定义参数，如{"title_en":"English Title", "is_all":true} |
 
 **GET请求参数**：
 
@@ -230,6 +232,7 @@ server {
 | res | string | 否 | 结果类型：all(返回所有结果)、results(仅返回results)、merge(仅返回merged_by_type)，默认为merge |
 | src | string | 否 | 数据来源类型：all(默认，全部来源)、tg(仅Telegram)、plugin(仅插件) |
 | plugins | string | 否 | 指定搜索的插件列表，使用英文逗号分隔多个插件名，不指定则搜索全部插件 |
+| ext | string | 否 | JSON格式的扩展参数，用于传递给插件的自定义参数，如{"title_en":"English Title", "is_all":true} |
 
 **POST请求示例**：
 
@@ -241,14 +244,18 @@ server {
   "refresh": true,
   "res": "merge",
   "src": "all",
-  "plugins": ["jikepan"]
+  "plugins": ["jikepan"],
+  "ext": {
+    "title_en": "Fast and Furious",
+    "is_all": true
+  }
 }
 ```
 
 **GET请求示例**：
 
 ```
-GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true&res=merge&src=tg
+GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true&res=merge&src=tg&ext={"title_en":"Fast and Furious","is_all":true}
 ```
 
 **成功响应**：

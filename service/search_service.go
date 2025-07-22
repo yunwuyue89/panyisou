@@ -103,7 +103,12 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 }
 
 // Search 执行搜索
-func (s *SearchService) Search(keyword string, channels []string, concurrency int, forceRefresh bool, resultType string, sourceType string, plugins []string) (model.SearchResponse, error) {
+func (s *SearchService) Search(keyword string, channels []string, concurrency int, forceRefresh bool, resultType string, sourceType string, plugins []string, ext map[string]interface{}) (model.SearchResponse, error) {
+	// 确保ext不为nil
+	if ext == nil {
+		ext = make(map[string]interface{})
+	}
+	
 	// 参数预处理
 	// 源类型标准化
 	if sourceType == "" {
@@ -195,7 +200,7 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 			defer wg.Done()
 			// 对于插件搜索，我们总是希望获取最新的缓存数据
 			// 因此，即使forceRefresh=false，我们也需要确保获取到最新的缓存
-			pluginResults, pluginErr = s.searchPlugins(keyword, plugins, forceRefresh, concurrency)
+			pluginResults, pluginErr = s.searchPlugins(keyword, plugins, forceRefresh, concurrency, ext)
 		}()
 	}
 	
@@ -557,7 +562,12 @@ func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh
 }
 
 // searchPlugins 搜索插件
-func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRefresh bool, concurrency int) ([]model.SearchResult, error) {
+func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRefresh bool, concurrency int, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 确保ext不为nil
+	if ext == nil {
+		ext = make(map[string]interface{})
+	}
+	
 	// 生成缓存键
 	cacheKey := cache.GeneratePluginCacheKey(keyword, plugins)
 	
@@ -648,25 +658,25 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		tasks = append(tasks, func() interface{} {
 			// 检查插件是否为异步插件
 			if asyncPlugin, ok := plugin.(interface {
-				AsyncSearch(keyword string, searchFunc func(*http.Client, string) ([]model.SearchResult, error), mainCacheKey string) ([]model.SearchResult, error)
+				AsyncSearch(keyword string, searchFunc func(*http.Client, string, map[string]interface{}) ([]model.SearchResult, error), mainCacheKey string, ext map[string]interface{}) ([]model.SearchResult, error)
 				SetMainCacheKey(string)
 			}); ok {
 				// 先设置主缓存键
 				asyncPlugin.SetMainCacheKey(cacheKey)
 				
-				// 是异步插件，调用AsyncSearch方法并传递主缓存键
-				results, err := asyncPlugin.AsyncSearch(keyword, func(client *http.Client, kw string) ([]model.SearchResult, error) {
-					// 这里使用插件的Search方法作为搜索函数
-					return plugin.Search(kw)
-				}, cacheKey)
+				// 是异步插件，调用AsyncSearch方法并传递主缓存键和ext参数
+				results, err := asyncPlugin.AsyncSearch(keyword, func(client *http.Client, kw string, extParams map[string]interface{}) ([]model.SearchResult, error) {
+					// 这里使用插件的Search方法作为搜索函数，传递ext参数
+					return plugin.Search(kw, extParams)
+				}, cacheKey, ext)
 				
 				if err != nil {
 					return nil
 				}
 				return results
 			} else {
-				// 不是异步插件，直接调用Search方法
-				results, err := plugin.Search(keyword)
+				// 不是异步插件，直接调用Search方法，传递ext参数
+				results, err := plugin.Search(keyword, ext)
 				if err != nil {
 					return nil
 				}

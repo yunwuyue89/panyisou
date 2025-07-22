@@ -252,7 +252,7 @@ func (p *PantaPlugin) Priority() int {
 }
 
 // Search 执行搜索并返回结果
-func (p *PantaPlugin) Search(keyword string) ([]model.SearchResult, error) {
+func (p *PantaPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 对关键词进行URL编码
 	encodedKeyword := url.QueryEscape(keyword)
 	

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	"log"
 	"pansou/model"
 	"pansou/plugin"
 	"pansou/util/json"
@@ -37,17 +37,28 @@ func NewJikepanAsyncV2Plugin() *JikepanAsyncV2Plugin {
 }
 
 // Search 执行搜索并返回结果
-func (p *JikepanAsyncV2Plugin) Search(keyword string) ([]model.SearchResult, error) {
-	// 使用保存的主缓存键
-	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey)
+func (p *JikepanAsyncV2Plugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 使用保存的主缓存键，传递ext参数但不使用
+	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey, ext)
 }
 
 // doSearch 实际的搜索实现
-func (p *JikepanAsyncV2Plugin) doSearch(client *http.Client, keyword string) ([]model.SearchResult, error) {
+func (p *JikepanAsyncV2Plugin) doSearch(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 构建请求
 	reqBody := map[string]interface{}{
 		"name":   keyword,
 		"is_all": false,
+	}
+	
+	// 检查ext中是否包含title_en参数，如果有则使用它
+	log.Printf("1111111111111111ext: v+%v", ext)
+	if ext != nil {
+		log.Printf("ext: v+%v", ext)
+		if isAll, ok := ext["is_all"].(bool); ok && isAll {
+			log.Printf("使用全量搜索 v+%v", isAll)
+			// 使用全量搜索，时间大约10秒
+			reqBody["is_all"] = true
+		}
 	}
 	
 	jsonData, err := json.Marshal(reqBody)

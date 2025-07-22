@@ -88,7 +88,7 @@ func (p *QuPanSouPlugin) Priority() int {
 }
 
 // Search 执行搜索并返回结果
-func (p *QuPanSouPlugin) Search(keyword string) ([]model.SearchResult, error) {
+func (p *QuPanSouPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 生成缓存键
 	cacheKey := keyword
 	
