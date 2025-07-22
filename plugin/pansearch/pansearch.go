@@ -386,7 +386,7 @@ func (p *PanSearchPlugin) Name() string {
 
 // Priority 返回插件优先级
 func (p *PanSearchPlugin) Priority() int {
-	return 2 // 较高优先级
+	return 3 // 中等优先级
 }
 
 // getBuildId 获取buildId，优先使用缓存
