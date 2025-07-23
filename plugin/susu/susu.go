@@ -86,9 +86,9 @@ const (
 	// 获取网盘详情API
 	ButtonDetailURL = "https://susuifa.com/wp-json/b2/v1/getDownloadPageData?post_id=%s&index=0&i=%d&guest="
 	// 最大重试次数
-	MaxRetries = 2
+	MaxRetries = 0
 	// 最大并发数
-	MaxConcurrency = 50
+	MaxConcurrency = 100
 )
 
 // SusuAsyncPlugin SuSu网站搜索异步插件
@@ -306,48 +306,8 @@ func (p *SusuAsyncPlugin) getLinks(client *http.Client, postID string) ([]model.
 		return cachedLinks.([]model.Link), nil
 	}
 	
-	// 构建获取按钮列表的URL
-	buttonListURL := fmt.Sprintf(ButtonListURL, postID)
-	
-	// 发送请求
-	req, err := http.NewRequest("POST", buttonListURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-	
-	// 设置请求头
-	req.Header.Set("User-Agent", getRandomUA())
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Referer", fmt.Sprintf("https://susuifa.com/%s.html", postID))
-	
-	// 发送请求（带重试）
-	resp, err := p.doRequestWithRetry(client, req, MaxRetries)
-	if err != nil {
-		return nil, fmt.Errorf("请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	// 读取响应体
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-	
-	// 解析响应
-	var buttonList []struct {
-		Button []struct{} `json:"button"`
-	}
-	if err := json.Unmarshal(respBody, &buttonList); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
-	}
-	
-	// 如果没有按钮列表或第一个元素没有按钮
-	if len(buttonList) == 0 || len(buttonList[0].Button) == 0 {
-		return nil, fmt.Errorf("没有找到网盘按钮")
-	}
-	
-	// 获取第一个元素的按钮数量
-	buttonCount := len(buttonList[0].Button)
+	// 直接并发发送6个请求，而不是先获取按钮列表
+	const buttonCount = 6 // 直接假设有8个按钮
 	
 	// 创建结果通道
 	linkChan := make(chan model.Link, buttonCount)
