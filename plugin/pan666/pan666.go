@@ -50,7 +50,7 @@ type Pan666AsyncPlugin struct {
 // NewPan666AsyncPlugin 创建新的pan666异步插件
 func NewPan666AsyncPlugin() *Pan666AsyncPlugin {
 	return &Pan666AsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pan666", 4),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pan666", 3),
 		retries:         MaxRetries,
 	}
 }

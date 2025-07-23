@@ -177,6 +177,11 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 			}
 		}
 	}
+	
+	// 如果未指定并发数，使用配置中的默认值
+	if concurrency <= 0 {
+		concurrency = config.AppConfig.DefaultConcurrency
+	}
 
 	// 并行获取TG搜索和插件搜索结果
 	var tgResults []model.SearchResult
@@ -645,10 +650,8 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 	
 	// 控制并发数
 	if concurrency <= 0 {
-		concurrency = len(availablePlugins) + 10
-		if concurrency < 1 {
-			concurrency = 1
-		}
+		// 使用配置中的默认值
+		concurrency = config.AppConfig.DefaultConcurrency
 	}
 	
 	// 使用工作池执行并行搜索

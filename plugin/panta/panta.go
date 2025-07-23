@@ -115,7 +115,7 @@ const (
 	threadURLTemplate = "https://www.91panta.cn/thread?topicId=%s"
 	
 	// 默认优先级
-	defaultPriority = 2
+	defaultPriority = 4
 	
 	// 默认超时时间（秒）
 	defaultTimeout = 6
