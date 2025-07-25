@@ -26,6 +26,7 @@ import (
 	_ "pansou/plugin/panta"
 	_ "pansou/plugin/qupansou"
 	_ "pansou/plugin/susu"
+	_ "pansou/plugin/panyq"
 	"pansou/service"
 	"pansou/util"
 )

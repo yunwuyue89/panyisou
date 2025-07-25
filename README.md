@@ -327,6 +327,8 @@ server {
     return 301 https://$host$request_uri;
 }
 
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=60r/m;
+
 server {
     listen 443 ssl http2;
     server_name pansou.252035.xyz;
@@ -357,3 +359,7 @@ server {
     }
 }
 ```
+
+## ⭐ Star 历史
+
+[![Star History Chart](https://api.star-history.com/svg?repos=fish2018/pansou&type=Date)](https://star-history.com/#fish2018/pansou&Date)
