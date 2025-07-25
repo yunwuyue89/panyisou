@@ -34,7 +34,7 @@ const (
 	ConfigFileName = "panyq_config.json"
 	// 基础URL
 	BaseURL = "https://panyq.com"
-	// 请求来源控制默认为关闭状态
+	// 请求来源控制默认为开启状态
 	EnableRefererCheck = true
 )
 
