@@ -15,6 +15,7 @@ import (
 	"pansou/util/cache"
 	"pansou/util/pool"
 	"sync"
+	"regexp"
 )
 
 // 优先关键词列表
@@ -236,7 +237,7 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 	}
 
 	// 合并链接按网盘类型分组（使用所有过滤后的结果）
-	mergedLinks := mergeResultsByType(allResults)
+	mergedLinks := mergeResultsByType(allResults, keyword)
 
 	// 构建响应
 	var total int
@@ -410,22 +411,347 @@ func (s *SearchService) searchChannel(keyword string, channel string) ([]model.S
 	return results, nil
 }
 
+// 用于从消息内容中提取链接-标题对应关系的函数
+func extractLinkTitlePairs(content string) map[string]string {
+	// 首先尝试使用换行符分割的方法
+	if strings.Contains(content, "\n") {
+		return extractLinkTitlePairsWithNewlines(content)
+	}
+	
+	// 如果没有换行符，使用正则表达式直接提取
+	return extractLinkTitlePairsWithoutNewlines(content)
+}
+
+// 处理有换行符的情况
+func extractLinkTitlePairsWithNewlines(content string) map[string]string {
+	// 结果映射：链接URL -> 对应标题
+	linkTitleMap := make(map[string]string)
+	
+	// 按行分割内容
+	lines := strings.Split(content, "\n")
+	
+	// 链接正则表达式
+	linkRegex := regexp.MustCompile(`https?://[^\s"']+`)
+	
+	// 第一遍扫描：识别标题-链接对
+	var lastTitle string
+	var lastTitleIndex int
+	
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		
+		// 检查当前行是否包含链接
+		links := linkRegex.FindAllString(line, -1)
+		
+		if len(links) > 0 {
+			// 当前行包含链接
+			
+			// 检查是否是标准链接行（以"链接："、"地址："等开头）
+			isStandardLinkLine := isLinkLine(line)
+			
+			if isStandardLinkLine && lastTitle != "" {
+				// 标准链接行，使用上一个标题
+				for _, link := range links {
+					linkTitleMap[link] = lastTitle
+				}
+			} else if !isStandardLinkLine {
+				// 非标准链接行，可能是"标题：链接"格式
+				titleFromLine := extractTitleFromLinkLine(line)
+				if titleFromLine != "" {
+					// 是"标题：链接"格式
+					for _, link := range links {
+						linkTitleMap[link] = titleFromLine
+					}
+				} else if lastTitle != "" {
+					// 其他情况，使用上一个标题
+					for _, link := range links {
+						linkTitleMap[link] = lastTitle
+					}
+				}
+			}
+		} else {
+			// 当前行不包含链接，可能是标题行
+			// 检查下一行是否为链接行
+			if i+1 < len(lines) {
+				nextLine := strings.TrimSpace(lines[i+1])
+				if isLinkLine(nextLine) || linkRegex.MatchString(nextLine) {
+					// 下一行是链接行或包含链接，当前行很可能是标题
+					lastTitle = cleanTitle(line)
+					lastTitleIndex = i
+				}
+			} else {
+				// 最后一行，也可能是标题
+				lastTitle = cleanTitle(line)
+				lastTitleIndex = i
+			}
+		}
+	}
+	
+	// 第二遍扫描：处理没有匹配到标题的链接
+	// 为每个链接找到最近的上文标题
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		
+		links := linkRegex.FindAllString(line, -1)
+		if len(links) == 0 {
+			continue
+		}
+		
+		for _, link := range links {
+			if _, exists := linkTitleMap[link]; !exists {
+				// 链接没有匹配到标题，尝试找最近的上文标题
+				nearestTitle := ""
+				
+				// 向上查找最近的标题行
+				for j := i - 1; j >= 0; j-- {
+					if j == lastTitleIndex || (j+1 < len(lines) && 
+						linkRegex.MatchString(lines[j+1]) && 
+						!linkRegex.MatchString(lines[j])) {
+						candidateTitle := cleanTitle(lines[j])
+						if candidateTitle != "" {
+							nearestTitle = candidateTitle
+							break
+						}
+					}
+				}
+				
+				if nearestTitle != "" {
+					linkTitleMap[link] = nearestTitle
+				}
+			}
+		}
+	}
+	
+	return linkTitleMap
+}
+
+// 处理没有换行符的情况
+func extractLinkTitlePairsWithoutNewlines(content string) map[string]string {
+	// 结果映射：链接URL -> 对应标题
+	linkTitleMap := make(map[string]string)
+	
+	// 链接正则表达式 - 精确匹配夸克网盘链接
+	linkRegex := regexp.MustCompile(`https?://pan\.quark\.cn/s/[a-zA-Z0-9]+`)
+	
+	// 提取所有链接
+	links := linkRegex.FindAllString(content, -1)
+	if len(links) == 0 {
+		return linkTitleMap
+	}
+	
+	// 使用链接位置分割内容
+	segments := make([]string, len(links)+1)
+	lastPos := 0
+	
+	// 查找每个链接的位置，并提取链接前的文本作为段落
+	for i, link := range links {
+		pos := strings.Index(content[lastPos:], link) + lastPos
+		if pos > lastPos {
+			segments[i] = content[lastPos:pos]
+		}
+		lastPos = pos + len(link)
+	}
+	
+	// 最后一段
+	if lastPos < len(content) {
+		segments[len(links)] = content[lastPos:]
+	}
+	
+	// 从每个段落中提取标题
+	for i, link := range links {
+		// 当前链接的标题应该在当前段落的末尾
+		var title string
+		
+		// 如果是第一个链接
+		if i == 0 {
+			// 提取第一个段落作为标题
+			title = extractTitleBeforeLink(segments[i])
+		} else {
+			// 从上一个链接后的文本中提取标题
+			title = extractTitleBeforeLink(segments[i])
+		}
+		
+		// 如果提取到了标题，保存链接-标题对应关系
+		if title != "" {
+			linkTitleMap[link] = title
+		}
+	}
+	
+	return linkTitleMap
+}
+
+// 从文本中提取链接前的标题
+func extractTitleBeforeLink(text string) string {
+	// 移除可能的链接前缀词
+	text = strings.TrimSpace(text)
+	
+	// 查找"链接："前的文本作为标题
+	if idx := strings.Index(text, "链接："); idx > 0 {
+		return cleanTitle(text[:idx])
+	}
+	
+	// 尝试匹配常见的标题模式
+	titlePattern := regexp.MustCompile(`([^链地资网\s]+?(?:\([^)]+\))?(?:\s*\d+K)?(?:\s*臻彩)?(?:\s*MAX)?(?:\s*HDR)?(?:\s*更(?:新)?\d+集))$`)
+	matches := titlePattern.FindStringSubmatch(text)
+	if len(matches) > 1 {
+		return cleanTitle(matches[1])
+	}
+	
+	return cleanTitle(text)
+}
+
+// 判断一行是否为链接行（主要包含链接的行）
+func isLinkLine(line string) bool {
+	lowerLine := strings.ToLower(line)
+	return strings.HasPrefix(lowerLine, "链接：") || 
+		   strings.HasPrefix(lowerLine, "地址：") ||
+		   strings.HasPrefix(lowerLine, "资源地址：") ||
+		   strings.HasPrefix(lowerLine, "网盘：") ||
+		   strings.HasPrefix(lowerLine, "网盘地址：") ||
+		   strings.HasPrefix(lowerLine, "链接:")
+}
+
+// 从链接行中提取可能的标题
+func extractTitleFromLinkLine(line string) string {
+	// 处理"标题：链接"格式
+	parts := strings.SplitN(line, "：", 2)
+	if len(parts) == 2 && !strings.Contains(parts[0], "http") &&
+		!isLinkPrefix(parts[0]) {
+		return cleanTitle(parts[0])
+	}
+	
+	// 处理"标题:链接"格式（半角冒号）
+	parts = strings.SplitN(line, ":", 2)
+	if len(parts) == 2 && !strings.Contains(parts[0], "http") &&
+		!isLinkPrefix(parts[0]) {
+		return cleanTitle(parts[0])
+	}
+	
+	return ""
+}
+
+// 判断是否为链接前缀词
+func isLinkPrefix(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return text == "链接" || 
+		   text == "地址" || 
+		   text == "资源地址" || 
+		   text == "网盘" || 
+		   text == "网盘地址"
+}
+
+// 清理标题文本
+func cleanTitle(title string) string {
+	// 移除常见的无关前缀
+	title = strings.TrimSpace(title)
+	title = strings.TrimPrefix(title, "名称：")
+	title = strings.TrimPrefix(title, "标题：")
+	title = strings.TrimPrefix(title, "片名：")
+	title = strings.TrimPrefix(title, "名称:")
+	title = strings.TrimPrefix(title, "标题:")
+	title = strings.TrimPrefix(title, "片名:")
+	
+	// 移除表情符号和特殊字符
+	emojiRegex := regexp.MustCompile(`[\p{So}\p{Sk}]`)
+	title = emojiRegex.ReplaceAllString(title, "")
+	
+	return strings.TrimSpace(title)
+}
+
+// 判断一行是否为空或只包含空白字符
+func isEmpty(line string) bool {
+	return strings.TrimSpace(line) == ""
+}
+
 // 将搜索结果按网盘类型分组
-func mergeResultsByType(results []model.SearchResult) model.MergedLinks {
+func mergeResultsByType(results []model.SearchResult, keyword string) model.MergedLinks {
 	// 创建合并结果的映射
 	mergedLinks := make(model.MergedLinks, 10) // 预分配容量，假设有10种不同的网盘类型
 
 	// 用于去重的映射，键为URL
 	uniqueLinks := make(map[string]model.MergedLink)
 
+	// 将关键词转为小写，用于不区分大小写的匹配
+	lowerKeyword := strings.ToLower(keyword)
+
 	// 遍历所有搜索结果
 	for _, result := range results {
+		// 提取消息中的链接-标题对应关系
+		linkTitleMap := extractLinkTitlePairs(result.Content)
+		
+		// 如果没有从内容中提取到标题，尝试直接从内容中匹配
+		if len(linkTitleMap) == 0 && len(result.Links) > 0 && !strings.Contains(result.Content, "\n") {
+			// 这是没有换行符的情况，尝试直接匹配
+			content := result.Content
+			
+			// 尝试使用"链接："分割内容
+			parts := strings.Split(content, "链接：")
+			if len(parts) > 1 && len(result.Links) <= len(parts)-1 {
+				// 第一部分是第一个标题
+				titles := make([]string, 0, len(parts))
+				titles = append(titles, cleanTitle(parts[0]))
+				
+				// 处理每个包含链接的部分，提取标题
+				for i := 1; i < len(parts)-1; i++ {
+					part := parts[i]
+					// 找到链接的结束位置
+					linkEnd := -1
+					for j, c := range part {
+						if c == ' ' || c == '窃' || c == '东' || c == '迎' || c == '千' || c == '我' || c == '恋' || c == '将' || c == '野' {
+							linkEnd = j
+							break
+						}
+					}
+					
+					if linkEnd > 0 {
+						// 提取标题
+						title := cleanTitle(part[linkEnd:])
+						titles = append(titles, title)
+					}
+				}
+				
+				// 将标题与链接关联
+				for i, link := range result.Links {
+					if i < len(titles) {
+						linkTitleMap[link.URL] = titles[i]
+					}
+				}
+			}
+		}
+		
 		for _, link := range result.Links {
+			// 尝试从映射中获取该链接对应的标题
+			title := result.Title // 默认使用消息标题
+			
+			// 查找完全匹配的链接
+			if specificTitle, found := linkTitleMap[link.URL]; found && specificTitle != "" {
+				title = specificTitle // 如果找到特定标题，则使用它
+			} else {
+				// 如果没有找到完全匹配的链接，尝试查找前缀匹配的链接
+				for mappedLink, mappedTitle := range linkTitleMap {
+					if strings.HasPrefix(mappedLink, link.URL) {
+						title = mappedTitle
+						break
+					}
+				}
+			}
+			
+			// 如果关键词不为空，且标题不包含关键词，则跳过此链接
+			if keyword != "" && !strings.Contains(strings.ToLower(title), lowerKeyword) {
+				continue
+			}
+			
 			// 创建合并后的链接
 			mergedLink := model.MergedLink{
 				URL:      link.URL,
 				Password: link.Password,
-				Note:     result.Title,
+				Note:     title, // 使用找到的特定标题
 				Datetime: result.Datetime,
 			}
 
