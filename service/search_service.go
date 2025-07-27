@@ -23,7 +23,6 @@ var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附
 
 // 全局缓存实例和缓存是否初始化标志
 var (
-	twoLevelCache    *cache.TwoLevelCache
 	enhancedTwoLevelCache *cache.EnhancedTwoLevelCache
 	cacheInitialized bool
 )
@@ -32,15 +31,8 @@ var (
 func init() {
 	if config.AppConfig != nil && config.AppConfig.CacheEnabled {
 		var err error
-		// 优先使用增强版缓存
+		// 使用增强版缓存
 		enhancedTwoLevelCache, err = cache.NewEnhancedTwoLevelCache()
-		if err == nil {
-			cacheInitialized = true
-			return
-		}
-		
-		// 如果增强版缓存初始化失败，回退到原始缓存
-		twoLevelCache, err = cache.NewTwoLevelCache()
 		if err == nil {
 			cacheInitialized = true
 		}
@@ -57,16 +49,10 @@ func NewSearchService(pluginManager *plugin.PluginManager) *SearchService {
 	// 检查缓存是否已初始化，如果未初始化则尝试重新初始化
 	if !cacheInitialized && config.AppConfig != nil && config.AppConfig.CacheEnabled {
 		var err error
-		// 优先使用增强版缓存
+		// 使用增强版缓存
 		enhancedTwoLevelCache, err = cache.NewEnhancedTwoLevelCache()
 		if err == nil {
 			cacheInitialized = true
-		} else {
-			// 如果增强版缓存初始化失败，回退到原始缓存
-			twoLevelCache, err = cache.NewTwoLevelCache()
-			if err == nil {
-				cacheInitialized = true
-			}
 		}
 	}
 	
@@ -815,23 +801,13 @@ func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh
 		var hit bool
 		var err error
 		
-		// 优先使用增强版缓存
+		// 使用增强版缓存
 		if enhancedTwoLevelCache != nil {
 			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
 			
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
-					// 直接返回缓存数据，不检查新鲜度
-					return results, nil
-				}
-			}
-		} else if twoLevelCache != nil {
-			data, hit, err = twoLevelCache.Get(cacheKey)
-			
-			if err == nil && hit {
-				var results []model.SearchResult
-				if err := cache.DeserializeWithPool(data, &results); err == nil {
 					// 直接返回缓存数据，不检查新鲜度
 					return results, nil
 				}
@@ -872,19 +848,13 @@ func (s *SearchService) searchTG(keyword string, channels []string, forceRefresh
 		go func(res []model.SearchResult) {
 			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
 			
-			// 优先使用增强版缓存
+			// 使用增强版缓存
 			if enhancedTwoLevelCache != nil {
 				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
 				if err != nil {
 					return
 				}
 				enhancedTwoLevelCache.Set(cacheKey, data, ttl)
-			} else if twoLevelCache != nil {
-				data, err := cache.SerializeWithPool(res)
-				if err != nil {
-					return
-				}
-				twoLevelCache.Set(cacheKey, data, ttl)
 			}
 		}(results)
 	}
@@ -908,7 +878,7 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		var hit bool
 		var err error
 		
-		// 优先使用增强版缓存
+		// 使用增强版缓存
 		if enhancedTwoLevelCache != nil {
 			
 			// 使用Get方法，它会检查磁盘缓存是否有更新
@@ -918,16 +888,6 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
-					// 返回缓存数据
-					return results, nil
-				}
-			}
-		} else if twoLevelCache != nil {
-			data, hit, err = twoLevelCache.Get(cacheKey)
-			
-			if err == nil && hit {
-				var results []model.SearchResult
-				if err := cache.DeserializeWithPool(data, &results); err == nil {
 					// 返回缓存数据
 					return results, nil
 				}
@@ -1031,19 +991,13 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		go func(res []model.SearchResult) {
 			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
 			
-			// 优先使用增强版缓存
+			// 使用增强版缓存
 			if enhancedTwoLevelCache != nil {
 				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
 				if err != nil {
 					return
 				}
 				enhancedTwoLevelCache.Set(cacheKey, data, ttl)
-			} else if twoLevelCache != nil {
-				data, err := cache.SerializeWithPool(res)
-				if err != nil {
-					return
-				}
-				twoLevelCache.Set(cacheKey, data, ttl)
 			}
 		}(allResults)
 	}

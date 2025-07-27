@@ -21,8 +21,11 @@ ARG VERSION=dev
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 
-# 构建应用
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${VCS_REF} -extldflags '-static'" -o pansou .
+# 这是关键修改点：接收 buildx 自动传入的平台参数
+ARG TARGETARCH=amd64
+
+# 构建应用 (注意这里的 GOARCH=${TARGETARCH} 修改)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${VCS_REF} -extldflags '-static'" -o pansou .
 
 # 运行阶段
 FROM alpine:3.19
@@ -68,4 +71,4 @@ LABEL org.opencontainers.image.title="PanSou" \
       maintainer="fish2018"
 
 # 运行应用
-CMD ["/app/pansou"] 
+CMD ["/app/pansou"]

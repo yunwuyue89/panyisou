@@ -3,8 +3,6 @@ package cache
 import (
 	"sync"
 	"time"
-
-	"pansou/config"
 )
 
 // 简单的内存缓存项
@@ -187,93 +185,4 @@ func (c *MemoryCache) StartCleanupTask() {
 			c.CleanExpired()
 		}
 	}()
-}
-
-// 两级缓存
-type TwoLevelCache struct {
-	memCache  *MemoryCache
-	diskCache *DiskCache
-}
-
-// 创建新的两级缓存
-func NewTwoLevelCache() (*TwoLevelCache, error) {
-	// 内存缓存大小为磁盘缓存的60%
-	memCacheMaxItems := 5000
-	memCacheSizeMB := config.AppConfig.CacheMaxSizeMB * 3 / 5
-	
-	memCache := NewMemoryCache(memCacheMaxItems, memCacheSizeMB)
-	memCache.StartCleanupTask()
-
-	diskCache, err := NewDiskCache(config.AppConfig.CachePath, config.AppConfig.CacheMaxSizeMB)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TwoLevelCache{
-		memCache:  memCache,
-		diskCache: diskCache,
-	}, nil
-}
-
-// 设置缓存
-func (c *TwoLevelCache) Set(key string, data []byte, ttl time.Duration) error {
-	// 先设置内存缓存（这是快速操作，直接在当前goroutine中执行）
-	c.memCache.Set(key, data, ttl)
-	
-	// 异步设置磁盘缓存（这是IO操作，可能较慢）
-	go func(k string, d []byte, t time.Duration) {
-		// 使用独立的goroutine写入磁盘，避免阻塞调用者
-		_ = c.diskCache.Set(k, d, t)
-	}(key, data, ttl)
-	
-	return nil
-}
-
-// 获取缓存
-func (c *TwoLevelCache) Get(key string) ([]byte, bool, error) {
-	// 优先检查内存缓存
-	if data, found := c.memCache.Get(key); found {
-		return data, true, nil
-	}
-	
-	// 内存未命中，检查磁盘缓存
-	data, found, err := c.diskCache.Get(key)
-	if err != nil {
-		return nil, false, err
-	}
-	
-	if found {
-		// 磁盘命中，更新内存缓存
-		ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
-		c.memCache.Set(key, data, ttl)
-		return data, true, nil
-	}
-	
-	return nil, false, nil
-}
-
-// 删除缓存
-func (c *TwoLevelCache) Delete(key string) error {
-	// 从内存缓存删除
-	c.memCache.mutex.Lock()
-	if item, exists := c.memCache.items[key]; exists {
-		c.memCache.currSize -= int64(item.size)
-		delete(c.memCache.items, key)
-	}
-	c.memCache.mutex.Unlock()
-	
-	// 从磁盘缓存删除
-	return c.diskCache.Delete(key)
-}
-
-// 清空所有缓存
-func (c *TwoLevelCache) Clear() error {
-	// 清空内存缓存
-	c.memCache.mutex.Lock()
-	c.memCache.items = make(map[string]*memoryCacheItem)
-	c.memCache.currSize = 0
-	c.memCache.mutex.Unlock()
-	
-	// 清空磁盘缓存
-	return c.diskCache.Clear()
 } 
