@@ -24,8 +24,8 @@ ARG VCS_REF=unknown
 # 这是关键修改点：接收 buildx 自动传入的平台参数
 ARG TARGETARCH=amd64
 
-# 构建应用 (注意这里的 GOARCH=${TARGETARCH} 修改)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${VCS_REF} -extldflags '-static'" -o pansou .
+# 构建应用 
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w -extldflags '-static'" -o pansou .
 
 # 运行阶段
 FROM alpine:3.19
