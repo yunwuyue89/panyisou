@@ -10,4 +10,5 @@ type SearchRequest struct {
 	SourceType   string                 `json:"src"`                         // 数据来源类型：all(默认，全部来源)、tg(仅Telegram)、plugin(仅插件)
 	Plugins      []string               `json:"plugins"`                     // 指定搜索的插件列表，不指定则搜索全部插件
 	Ext          map[string]interface{} `json:"ext"`                         // 扩展参数，用于传递给插件的自定义参数
+	CloudTypes   []string               `json:"cloud_types"`                 // 指定返回的网盘类型列表，不指定则返回所有类型
 } 

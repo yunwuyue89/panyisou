@@ -26,18 +26,19 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 
 ## 支持的网盘类型
 
-- 百度网盘 (`pan.baidu.com`)
-- 阿里云盘 (`aliyundrive.com`, `alipan.com`)
-- 夸克网盘 (`pan.quark.cn`)
-- 天翼云盘 (`cloud.189.cn`)
-- UC网盘 (`drive.uc.cn`)
-- 移动云盘 (`caiyun.139.com`)
-- 115网盘 (`115.com`, `115cdn.com`, `anxia.com`)
-- PikPak (`mypikpak.com`)
-- 迅雷网盘 (`pan.xunlei.com`)
-- 123网盘 (`123684.com`, `123685.com`, `123912.com`, `123pan.com`, `123pan.cn`, `123592.com`)
-- 磁力链接 (`magnet:?xt=urn:btih:`)
-- 电驴链接 (`ed2k://`)
+- 百度网盘 (`baidu`)
+- 阿里云盘 (`aliyun`)
+- 夸克网盘 (`quark`)
+- 天翼云盘 (`tianyi`)
+- UC网盘 (`uc`)
+- 移动云盘 (`mobile`)
+- 115网盘 (`115`)
+- PikPak (`pikpak`)
+- 迅雷网盘 (`xunlei`)
+- 123网盘 (`123`)
+- 磁力链接 (`magnet`)
+- 电驴链接 (`ed2k`)
+- 其他 (`others`)
 
 ## API文档
 
@@ -60,6 +61,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 | res | string | 否 | 结果类型：all(返回所有结果)、results(仅返回results)、merge(仅返回merged_by_type)，默认为merge |
 | src | string | 否 | 数据来源类型：all(默认，全部来源)、tg(仅Telegram)、plugin(仅插件) |
 | plugins | string[] | 否 | 指定搜索的插件列表，不指定则搜索全部插件 |
+| cloud_types | string[] | 否 | 指定返回的网盘类型列表，支持：baidu、aliyun、quark、tianyi、uc、mobile、115、pikpak、xunlei、123、magnet、ed2k，不指定则返回所有类型 |
 | ext | object | 否 | 扩展参数，用于传递给插件的自定义参数，如{"title_en":"English Title", "is_all":true} |
 
 **GET请求参数**：
@@ -73,6 +75,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 | res | string | 否 | 结果类型：all(返回所有结果)、results(仅返回results)、merge(仅返回merged_by_type)，默认为merge |
 | src | string | 否 | 数据来源类型：all(默认，全部来源)、tg(仅Telegram)、plugin(仅插件) |
 | plugins | string | 否 | 指定搜索的插件列表，使用英文逗号分隔多个插件名，不指定则搜索全部插件 |
+| cloud_types | string | 否 | 指定返回的网盘类型列表，使用英文逗号分隔多个类型，支持：baidu、aliyun、quark、tianyi、uc、mobile、115、pikpak、xunlei、123、magnet、ed2k，不指定则返回所有类型 |
 | ext | string | 否 | JSON格式的扩展参数，用于传递给插件的自定义参数，如{"title_en":"English Title", "is_all":true} |
 
 **POST请求示例**：
@@ -86,6 +89,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
   "res": "merge",
   "src": "all",
   "plugins": ["jikepan"],
+  "cloud_types": ["baidu", "quark"],
   "ext": {
     "title_en": "Fast and Furious",
     "is_all": true
@@ -96,7 +100,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 **GET请求示例**：
 
 ```
-GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true&res=merge&src=tg&ext={"title_en":"Fast and Furious","is_all":true}
+GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true&res=merge&src=tg&cloud_types=baidu,quark&ext={"title_en":"Fast and Furious","is_all":true}
 ```
 
 **成功响应**：

@@ -90,7 +90,7 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 }
 
 // Search 执行搜索
-func (s *SearchService) Search(keyword string, channels []string, concurrency int, forceRefresh bool, resultType string, sourceType string, plugins []string, ext map[string]interface{}) (model.SearchResponse, error) {
+func (s *SearchService) Search(keyword string, channels []string, concurrency int, forceRefresh bool, resultType string, sourceType string, plugins []string, cloudTypes []string, ext map[string]interface{}) (model.SearchResponse, error) {
 	// 确保ext不为nil
 	if ext == nil {
 		ext = make(map[string]interface{})
@@ -223,7 +223,7 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 	}
 
 	// 合并链接按网盘类型分组（使用所有过滤后的结果）
-	mergedLinks := mergeResultsByType(allResults, keyword)
+	mergedLinks := mergeResultsByType(allResults, keyword, cloudTypes)
 
 	// 构建响应
 	var total int
@@ -656,7 +656,7 @@ func isEmpty(line string) bool {
 }
 
 // 将搜索结果按网盘类型分组
-func mergeResultsByType(results []model.SearchResult, keyword string) model.MergedLinks {
+func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes []string) model.MergedLinks {
 	// 创建合并结果的映射
 	mergedLinks := make(model.MergedLinks, 10) // 预分配容量，假设有10种不同的网盘类型
 
@@ -785,6 +785,27 @@ func mergeResultsByType(results []model.SearchResult, keyword string) model.Merg
 			return links[i].Datetime.After(links[j].Datetime)
 		})
 		mergedLinks[linkType] = links
+	}
+
+	// 如果指定了cloudTypes，则过滤结果
+	if len(cloudTypes) > 0 {
+		// 创建过滤后的结果映射
+		filteredLinks := make(model.MergedLinks)
+		
+		// 将cloudTypes转换为map以提高查找性能
+		allowedTypes := make(map[string]bool)
+		for _, cloudType := range cloudTypes {
+			allowedTypes[strings.ToLower(strings.TrimSpace(cloudType))] = true
+		}
+		
+		// 只保留指定类型的链接
+		for linkType, links := range mergedLinks {
+			if allowedTypes[strings.ToLower(linkType)] {
+				filteredLinks[linkType] = links
+			}
+		}
+		
+		return filteredLinks
 	}
 
 	return mergedLinks

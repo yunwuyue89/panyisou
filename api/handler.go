@@ -90,6 +90,26 @@ func SearchHandler(c *gin.Context) {
 			plugins = nil
 		}
 		
+		// 处理cloud_types参数，支持逗号分隔
+		var cloudTypes []string
+		// 检查请求中是否存在cloud_types参数
+		if c.Request.URL.Query().Has("cloud_types") {
+			cloudTypesStr := c.Query("cloud_types")
+			// 判断参数是否非空
+			if cloudTypesStr != "" && cloudTypesStr != " " {
+				parts := strings.Split(cloudTypesStr, ",")
+				for _, part := range parts {
+					trimmed := strings.TrimSpace(part)
+					if trimmed != "" {
+						cloudTypes = append(cloudTypes, trimmed)
+					}
+				}
+			}
+		} else {
+			// 如果请求中不存在cloud_types参数，设置为nil
+			cloudTypes = nil
+		}
+		
 		// 处理ext参数，JSON格式
 		var ext map[string]interface{}
 		extStr := c.Query("ext")
@@ -117,6 +137,7 @@ func SearchHandler(c *gin.Context) {
 			ResultType:   resultType,
 			SourceType:   sourceType,
 			Plugins:      plugins,
+			CloudTypes:   cloudTypes, // 添加cloud_types到请求中
 			Ext:          ext,
 		}
 	} else {
@@ -164,7 +185,7 @@ func SearchHandler(c *gin.Context) {
 	}
 	
 	// 执行搜索
-	result, err := searchService.Search(req.Keyword, req.Channels, req.Concurrency, req.ForceRefresh, req.ResultType, req.SourceType, req.Plugins, req.Ext)
+	result, err := searchService.Search(req.Keyword, req.Channels, req.Concurrency, req.ForceRefresh, req.ResultType, req.SourceType, req.Plugins, req.CloudTypes, req.Ext)
 	
 	if err != nil {
 		response := model.NewErrorResponse(500, "搜索失败: "+err.Error())
