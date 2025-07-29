@@ -9,7 +9,7 @@ import (
 
 // EnhancedTwoLevelCache 改进的两级缓存
 type EnhancedTwoLevelCache struct {
-	memory     *MemoryCache
+	memory     *ShardedMemoryCache
 	disk       *ShardedDiskCache
 	mutex      sync.RWMutex
 	serializer Serializer
@@ -21,12 +21,11 @@ func NewEnhancedTwoLevelCache() (*EnhancedTwoLevelCache, error) {
 	memCacheMaxItems := 5000
 	memCacheSizeMB := config.AppConfig.CacheMaxSizeMB * 3 / 5
 	
-	memCache := NewMemoryCache(memCacheMaxItems, memCacheSizeMB)
+	memCache := NewShardedMemoryCache(memCacheMaxItems, memCacheSizeMB)
 	memCache.StartCleanupTask()
 
-	// 创建分片磁盘缓存，默认使用8个分片
-	shardCount := 8
-	diskCache, err := NewShardedDiskCache(config.AppConfig.CachePath, shardCount, config.AppConfig.CacheMaxSizeMB)
+	// 创建优化的分片磁盘缓存，使用动态分片数量
+	diskCache, err := NewOptimizedShardedDiskCache(config.AppConfig.CachePath, config.AppConfig.CacheMaxSizeMB)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +82,7 @@ func (c *EnhancedTwoLevelCache) Get(key string) ([]byte, bool, error) {
 // Delete 删除缓存
 func (c *EnhancedTwoLevelCache) Delete(key string) error {
 	// 从内存缓存删除
-	c.memory.mutex.Lock()
-	if item, exists := c.memory.items[key]; exists {
-		c.memory.currSize -= int64(item.size)
-		delete(c.memory.items, key)
-	}
-	c.memory.mutex.Unlock()
+	c.memory.Delete(key)
 	
 	// 从磁盘缓存删除
 	return c.disk.Delete(key)
@@ -97,10 +91,7 @@ func (c *EnhancedTwoLevelCache) Delete(key string) error {
 // Clear 清空所有缓存
 func (c *EnhancedTwoLevelCache) Clear() error {
 	// 清空内存缓存
-	c.memory.mutex.Lock()
-	c.memory.items = make(map[string]*memoryCacheItem)
-	c.memory.currSize = 0
-	c.memory.mutex.Unlock()
+	c.memory.Clear()
 	
 	// 清空磁盘缓存
 	return c.disk.Clear()
