@@ -1,34 +1,21 @@
 package plugin
 
 import (
-	"compress/gzip"
-	"encoding/gob"
-	"pansou/util/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"math/rand"
 
 	"pansou/config"
 	"pansou/model"
 )
 
-// 缓存相关变量
+// 工作池和统计相关变量
 var (
-	// API响应缓存，键为关键词，值为缓存的响应
+	// API响应缓存，键为关键词，值为缓存的响应（仅内存，不持久化）
 	apiResponseCache = sync.Map{}
-	
-	// 最后一次清理缓存的时间
-	lastCacheCleanTime = time.Now()
-	
-	// 最后一次保存缓存的时间
-	lastCacheSaveTime = time.Now()
 	
 	// 工作池相关变量
 	backgroundWorkerPool chan struct{}
@@ -43,35 +30,24 @@ var (
 	initialized       bool = false
 	initLock          sync.Mutex
 	
-	// 缓存保存锁，防止并发保存导致的竞态条件
-	saveCacheLock     sync.Mutex
-	
 	// 默认配置值
 	defaultAsyncResponseTimeout = 4 * time.Second
 	defaultPluginTimeout = 30 * time.Second
-	defaultCacheTTL = 1 * time.Hour
+	defaultCacheTTL = 1 * time.Hour  // 恢复但仅用于内存缓存
 	defaultMaxBackgroundWorkers = 20
 	defaultMaxBackgroundTasks = 100
-	
-	// 缓存保存间隔 (2分钟)
-	cacheSaveInterval = 2 * time.Minute
 	
 	// 缓存访问频率记录
 	cacheAccessCount = sync.Map{}
 )
 
-// 缓存响应结构
+// 缓存响应结构（仅内存，不持久化到磁盘）
 type cachedResponse struct {
 	Results   []model.SearchResult `json:"results"`
 	Timestamp time.Time           `json:"timestamp"`
 	Complete  bool                `json:"complete"`
 	LastAccess time.Time          `json:"last_access"`
 	AccessCount int               `json:"access_count"`
-}
-
-// 可序列化的缓存结构，用于持久化
-type persistentCache struct {
-	Entries map[string]cachedResponse
 }
 
 // initAsyncPlugin 初始化异步插件配置
@@ -91,12 +67,7 @@ func initAsyncPlugin() {
 	
 	backgroundWorkerPool = make(chan struct{}, maxWorkers)
 	
-	// 启动缓存清理和保存goroutine
-	go startCacheCleaner()
-	go startCachePersistence()
-	
-	// 尝试从磁盘加载缓存
-	loadCacheFromDisk()
+	// 异步插件本地缓存系统已移除，现在只依赖主缓存系统
 	
 	initialized = true
 }
@@ -106,297 +77,11 @@ func InitAsyncPluginSystem() {
 	initAsyncPlugin()
 }
 
-// startCacheCleaner 启动一个定期清理缓存的goroutine
-func startCacheCleaner() {
-	// 每小时清理一次缓存
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-	
-	for range ticker.C {
-		cleanCache()
-	}
-}
+// 缓存清理和持久化系统已移除
+// 异步插件现在只负责搜索，缓存统一由主缓存系统管理
 
-// cleanCache 清理过期缓存
-func cleanCache() {
-	now := time.Now()
-	lastCacheCleanTime = now
-	
-	// 获取缓存TTL
-	cacheTTL := defaultCacheTTL
-	if config.AppConfig != nil && config.AppConfig.AsyncCacheTTLHours > 0 {
-		cacheTTL = time.Duration(config.AppConfig.AsyncCacheTTLHours) * time.Hour
-	}
-	
-	// 第一步：收集所有缓存项和它们的信息
-	type cacheInfo struct {
-		key          string
-		item         cachedResponse
-		age          time.Duration      // 年龄（当前时间 - 创建时间）
-		idleTime     time.Duration      // 空闲时间（当前时间 - 最后访问时间）
-		score        float64            // 缓存项得分（用于决定是否保留）
-	}
-	
-	var allItems []cacheInfo
-	var totalSize int = 0
-	
-	apiResponseCache.Range(func(k, v interface{}) bool {
-		key := k.(string)
-		item := v.(cachedResponse)
-		age := now.Sub(item.Timestamp)
-		idleTime := now.Sub(item.LastAccess)
-		
-		// 如果超过TTL，直接删除
-		if age > cacheTTL {
-			apiResponseCache.Delete(key)
-			return true
-		}
-		
-		// 计算大小（简单估算，每个结果占用1单位）
-		itemSize := len(item.Results)
-		totalSize += itemSize
-		
-		// 计算得分：访问次数 / (空闲时间的平方 * 年龄)
-		// 这样：
-		// - 访问频率高的得分高
-		// - 最近访问的得分高
-		// - 较新的缓存得分高
-		score := float64(item.AccessCount) / (idleTime.Seconds() * idleTime.Seconds() * age.Seconds())
-		
-		allItems = append(allItems, cacheInfo{
-			key:       key,
-			item:      item,
-			age:       age,
-			idleTime:  idleTime,
-			score:     score,
-		})
-		
-		return true
-	})
-	
-	// 获取缓存大小限制（默认10000项）
-	maxCacheSize := 10000
-	if config.AppConfig != nil && config.AppConfig.CacheMaxSizeMB > 0 {
-		// 这里我们将MB转换为大致的项目数，假设每项平均1KB
-		maxCacheSize = config.AppConfig.CacheMaxSizeMB * 1024
-	}
-	
-	// 如果缓存不超过限制，不需要清理
-	if totalSize <= maxCacheSize {
-		return
-	}
-	
-	// 按得分排序（从低到高）
-	sort.Slice(allItems, func(i, j int) bool {
-		return allItems[i].score < allItems[j].score
-	})
-	
-	// 需要删除的大小
-	sizeToRemove := totalSize - maxCacheSize
-	
-	// 从得分低的开始删除，直到满足大小要求
-	removedSize := 0
-	removedCount := 0
-	
-	for _, item := range allItems {
-		if removedSize >= sizeToRemove {
-			break
-		}
-		
-		apiResponseCache.Delete(item.key)
-		removedSize += len(item.item.Results)
-		removedCount++
-		
-		// 最多删除总数的20%
-		if removedCount >= len(allItems) / 5 {
-			break
-		}
-	}
-	
-	fmt.Printf("缓存清理完成: 删除了%d个项目（总共%d个）\n", removedCount, len(allItems))
-}
-
-// startCachePersistence 启动定期保存缓存到磁盘的goroutine
-func startCachePersistence() {
-	// 每2分钟保存一次缓存
-	ticker := time.NewTicker(cacheSaveInterval)
-	defer ticker.Stop()
-	
-	for range ticker.C {
-		// 检查是否有缓存项需要保存
-		if hasCacheItems() {
-			saveCacheToDisk()
-		}
-	}
-}
-
-// hasCacheItems 检查是否有缓存项
-func hasCacheItems() bool {
-	hasItems := false
-	apiResponseCache.Range(func(k, v interface{}) bool {
-		hasItems = true
-		return false // 找到一个就停止遍历
-	})
-	return hasItems
-}
-
-// getCachePath 获取缓存文件路径
-func getCachePath() string {
-	// 默认缓存路径
-	cachePath := "cache"
-	
-	// 如果配置已加载，则使用配置中的缓存路径
-	if config.AppConfig != nil && config.AppConfig.CachePath != "" {
-		cachePath = config.AppConfig.CachePath
-	}
-	
-	// 创建缓存目录（如果不存在）
-	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-		os.MkdirAll(cachePath, 0755)
-	}
-	
-	return filepath.Join(cachePath, "async_cache.gob")
-}
-
-// saveCacheToDisk 将缓存保存到磁盘
-func saveCacheToDisk() {
-	// 使用互斥锁确保同一时间只有一个goroutine可以执行
-	saveCacheLock.Lock()
-	defer saveCacheLock.Unlock()
-	
-	cacheFile := getCachePath()
-	lastCacheSaveTime = time.Now()
-	
-	// 创建临时文件
-	tempFile := cacheFile + ".tmp"
-	file, err := os.Create(tempFile)
-	if err != nil {
-		fmt.Printf("创建缓存文件失败: %v\n", err)
-		return
-	}
-	defer file.Close()
-	
-	// 创建gzip压缩写入器
-	gzipWriter := gzip.NewWriter(file)
-	defer gzipWriter.Close()
-	
-	// 将缓存内容转换为可序列化的结构
-	persistent := persistentCache{
-		Entries: make(map[string]cachedResponse),
-	}
-	
-	// 记录缓存项数量和总结果数
-	itemCount := 0
-	resultCount := 0
-	
-	apiResponseCache.Range(func(k, v interface{}) bool {
-		key := k.(string)
-		value := v.(cachedResponse)
-		persistent.Entries[key] = value
-		itemCount++
-		resultCount += len(value.Results)
-		return true
-	})
-	
-	// 使用gob编码器保存
-	encoder := gob.NewEncoder(gzipWriter)
-	if err := encoder.Encode(persistent); err != nil {
-		fmt.Printf("编码缓存失败: %v\n", err)
-		return
-	}
-	
-	// 确保所有数据已写入
-	gzipWriter.Close()
-	file.Sync()
-	file.Close()
-	
-	// 使用原子重命名（这确保了替换是原子的，避免了缓存文件损坏）
-	if err := os.Rename(tempFile, cacheFile); err != nil {
-		fmt.Printf("重命名缓存文件失败: %v\n", err)
-		return
-	}
-	
-	// fmt.Printf("缓存已保存到磁盘，条目数: %d，结果总数: %d\n", itemCount, resultCount)
-}
-
-// SaveCacheToDisk 导出的缓存保存函数，用于程序退出时调用
-func SaveCacheToDisk() {
-	if initialized {
-		// fmt.Println("程序退出，正在保存异步插件缓存...")
-		saveCacheToDisk()
-		// fmt.Println("异步插件缓存保存完成")
-	}
-}
-
-// loadCacheFromDisk 从磁盘加载缓存
-func loadCacheFromDisk() {
-	cacheFile := getCachePath()
-	
-	// 检查缓存文件是否存在
-	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
-		// fmt.Println("缓存文件不存在，跳过加载")
-		return
-	}
-	
-	// 打开缓存文件
-	file, err := os.Open(cacheFile)
-	if err != nil {
-		// fmt.Printf("打开缓存文件失败: %v\n", err)
-		return
-	}
-	defer file.Close()
-	
-	// 创建gzip读取器
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		// 尝试作为非压缩文件读取（向后兼容）
-		file.Seek(0, 0) // 重置文件指针
-		decoder := gob.NewDecoder(file)
-		var persistent persistentCache
-		if err := decoder.Decode(&persistent); err != nil {
-			fmt.Printf("解码缓存失败: %v\n", err)
-			return
-		}
-		loadCacheEntries(persistent)
-		return
-	}
-	defer gzipReader.Close()
-	
-	// 使用gob解码器加载
-	var persistent persistentCache
-	decoder := gob.NewDecoder(gzipReader)
-	if err := decoder.Decode(&persistent); err != nil {
-		fmt.Printf("解码缓存失败: %v\n", err)
-		return
-	}
-	
-	loadCacheEntries(persistent)
-}
-
-// loadCacheEntries 加载缓存条目到内存
-func loadCacheEntries(persistent persistentCache) {
-	// 获取缓存TTL，用于过滤过期项
-	cacheTTL := defaultCacheTTL
-	if config.AppConfig != nil && config.AppConfig.AsyncCacheTTLHours > 0 {
-		cacheTTL = time.Duration(config.AppConfig.AsyncCacheTTLHours) * time.Hour
-	}
-	
-	now := time.Now()
-	loadedCount := 0
-	totalResultCount := 0
-	
-	// 将解码后的缓存加载到内存
-	for key, value := range persistent.Entries {
-		// 只加载未过期的缓存
-		if now.Sub(value.Timestamp) <= cacheTTL {
-			apiResponseCache.Store(key, value)
-			loadedCount++
-			totalResultCount += len(value.Results)
-		}
-	}
-	
-	// fmt.Printf("从磁盘加载了%d条缓存（过滤后），包含%d个搜索结果\n", loadedCount, totalResultCount)
-}
+// 异步插件本地缓存系统已完全移除
+// 现在异步插件只负责搜索，缓存统一由主缓存系统管理
 
 // acquireWorkerSlot 尝试获取工作槽
 func acquireWorkerSlot() bool {
@@ -442,7 +127,7 @@ func recordAsyncCompletion() {
 	atomic.AddInt64(&asyncCompletions, 1)
 }
 
-// recordCacheAccess 记录缓存访问次数，用于智能缓存策略
+// recordCacheAccess 记录缓存访问次数，用于智能缓存策略（仅内存）
 func recordCacheAccess(key string) {
 	// 更新缓存项的访问时间和计数
 	if cached, ok := apiResponseCache.Load(key); ok {
@@ -460,15 +145,18 @@ func recordCacheAccess(key string) {
 	}
 }
 
-// BaseAsyncPlugin 基础异步插件结构
+// BaseAsyncPlugin 基础异步插件结构（保留内存缓存，移除磁盘持久化）
 type BaseAsyncPlugin struct {
-	name              string
-	priority          int
-	client            *http.Client  // 用于短超时的客户端
-	backgroundClient  *http.Client  // 用于长超时的客户端
-	cacheTTL          time.Duration // 缓存有效期
-	mainCacheUpdater  func(string, []byte, time.Duration) error // 主缓存更新函数
-	MainCacheKey      string        // 主缓存键，导出字段
+	name               string
+	priority           int
+	client             *http.Client  // 用于短超时的客户端
+	backgroundClient   *http.Client  // 用于长超时的客户端
+	cacheTTL           time.Duration // 内存缓存有效期
+	mainCacheUpdater   func(string, []model.SearchResult, time.Duration, bool, string) error // 主缓存更新函数（支持IsFinal参数，接收原始数据，最后参数为关键词）
+	MainCacheKey       string        // 主缓存键，导出字段
+	currentKeyword     string        // 当前搜索的关键词，用于日志显示
+	finalUpdateTracker map[string]bool // 追踪已更新的最终结果缓存
+	finalUpdateMutex   sync.RWMutex  // 保护finalUpdateTracker的并发访问
 }
 
 // NewBaseAsyncPlugin 创建基础异步插件
@@ -499,7 +187,8 @@ func NewBaseAsyncPlugin(name string, priority int) *BaseAsyncPlugin {
 		backgroundClient: &http.Client{
 			Timeout: processingTimeout,
 		},
-		cacheTTL: cacheTTL,
+		cacheTTL:           cacheTTL,
+		finalUpdateTracker: make(map[string]bool), // 初始化缓存更新追踪器
 	}
 }
 
@@ -508,8 +197,13 @@ func (p *BaseAsyncPlugin) SetMainCacheKey(key string) {
 	p.MainCacheKey = key
 }
 
-// SetMainCacheUpdater 设置主缓存更新函数
-func (p *BaseAsyncPlugin) SetMainCacheUpdater(updater func(string, []byte, time.Duration) error) {
+// SetCurrentKeyword 设置当前搜索关键词（用于日志显示）
+func (p *BaseAsyncPlugin) SetCurrentKeyword(keyword string) {
+	p.currentKeyword = keyword
+}
+
+// SetMainCacheUpdater 设置主缓存更新函数（修复后的签名，增加关键词参数）
+func (p *BaseAsyncPlugin) SetMainCacheUpdater(updater func(string, []model.SearchResult, time.Duration, bool, string) error) {
 	p.mainCacheUpdater = updater
 }
 
@@ -611,8 +305,9 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 				AccessCount: 1,
 			})
 			
-			// 更新主缓存系统
-			p.updateMainCache(mainCacheKey, results)
+			// 🔧 工作池满时4秒内完成，这是完整结果
+			fmt.Printf("[%s] 🕐 工作池满-直接完成: %v\n", p.name, time.Since(now))
+			p.updateMainCacheWithFinal(mainCacheKey, results, true)
 			
 			return
 		}
@@ -625,7 +320,7 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 		select {
 		case <-doneChan:
 			// 已经响应，只更新缓存
-			if err == nil && len(results) > 0 {
+			if err == nil {
 				// 检查是否存在旧缓存
 				var accessCount int = 1
 				var lastAccess time.Time = now
@@ -668,11 +363,10 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 				})
 				recordAsyncCompletion()
 				
-				// 更新主缓存系统
-				p.updateMainCache(mainCacheKey, results)
+				// 异步插件后台完成时更新主缓存（标记为最终结果）
+				p.updateMainCacheWithFinal(mainCacheKey, results, true)
 				
-				// 更新缓存后立即触发保存
-				go saveCacheToDisk()
+				// 异步插件本地缓存系统已移除
 			}
 		default:
 			// 尚未响应，发送结果
@@ -722,11 +416,11 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 					AccessCount: 1,
 				})
 				
-				// 更新主缓存系统
-				p.updateMainCache(mainCacheKey, results)
+				// 🔧 4秒内正常完成，这是完整的最终结果
+				fmt.Printf("[%s] 🕐 4秒内正常完成: %v\n", p.name, time.Since(now))
+				p.updateMainCacheWithFinal(mainCacheKey, results, true)
 				
-				// 更新缓存后立即触发保存
-				go saveCacheToDisk()
+				// 异步插件本地缓存系统已移除
 			}
 		}
 	}()
@@ -746,6 +440,8 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 		close(doneChan)
 		return nil, err
 	case <-time.After(responseTimeout):
+		// 插件响应超时，后台继续处理（优化完成，日志简化）
+		
 		// 响应超时，返回空结果，后台继续处理
 		go func() {
 			defer close(doneChan)
@@ -772,8 +468,230 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 			AccessCount: 1,
 		})
 		
+		// 🔧 修复：4秒超时时也要更新主缓存，标记为部分结果（空结果）
+		p.updateMainCacheWithFinal(mainCacheKey, []model.SearchResult{}, false)
+		
 		// fmt.Printf("[%s] 响应超时，后台继续处理: %s\n", p.name, pluginSpecificCacheKey)
 		return []model.SearchResult{}, nil
+	}
+}
+
+// AsyncSearchWithResult 异步搜索方法，返回PluginSearchResult
+func (p *BaseAsyncPlugin) AsyncSearchWithResult(
+	keyword string,
+	searchFunc func(*http.Client, string, map[string]interface{}) ([]model.SearchResult, error),
+	mainCacheKey string,
+	ext map[string]interface{},
+) (model.PluginSearchResult, error) {
+	// 确保ext不为nil
+	if ext == nil {
+		ext = make(map[string]interface{})
+	}
+	
+	now := time.Now()
+	
+	// 修改缓存键，确保包含插件名称
+	pluginSpecificCacheKey := fmt.Sprintf("%s:%s", p.name, keyword)
+	
+	// 检查缓存
+	if cachedItems, ok := apiResponseCache.Load(pluginSpecificCacheKey); ok {
+		cachedResult := cachedItems.(cachedResponse)
+		
+		// 缓存完全有效（未过期且完整）
+		if time.Since(cachedResult.Timestamp) < p.cacheTTL && cachedResult.Complete {
+			recordCacheHit()
+			recordCacheAccess(pluginSpecificCacheKey)
+			
+			// 如果缓存接近过期（已用时间超过TTL的80%），在后台刷新缓存
+			if time.Since(cachedResult.Timestamp) > (p.cacheTTL * 4 / 5) {
+				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult, mainCacheKey, ext)
+			}
+			
+			return model.PluginSearchResult{
+				Results:   cachedResult.Results,
+				IsFinal:   cachedResult.Complete,
+				Timestamp: cachedResult.Timestamp,
+				Source:    p.name,
+				Message:   "从缓存获取",
+			}, nil
+		}
+		
+		// 缓存已过期但有结果，启动后台刷新，同时返回旧结果
+		if len(cachedResult.Results) > 0 {
+			recordCacheHit()
+			recordCacheAccess(pluginSpecificCacheKey)
+			
+			// 标记为部分过期
+			if time.Since(cachedResult.Timestamp) >= p.cacheTTL {
+				// 在后台刷新缓存
+				go p.refreshCacheInBackground(keyword, pluginSpecificCacheKey, searchFunc, cachedResult, mainCacheKey, ext)
+			}
+			
+			return model.PluginSearchResult{
+				Results:   cachedResult.Results,
+				IsFinal:   false, // 🔥 过期数据标记为非最终结果
+				Timestamp: cachedResult.Timestamp,
+				Source:    p.name,
+				Message:   "缓存已过期，后台刷新中",
+			}, nil
+		}
+	}
+	
+	recordCacheMiss()
+	
+	// 创建通道
+	resultChan := make(chan []model.SearchResult, 1)
+	errorChan := make(chan error, 1)
+	doneChan := make(chan struct{})
+	
+	// 启动后台处理
+	go func() {
+		defer func() {
+			select {
+			case <-doneChan:
+			default:
+				close(doneChan)
+			}
+		}()
+		
+		// 尝试获取工作槽
+		if !acquireWorkerSlot() {
+			// 工作池已满，使用快速响应客户端直接处理
+			results, err := searchFunc(p.client, keyword, ext)
+			if err != nil {
+				select {
+				case errorChan <- err:
+				default:
+				}
+				return
+			}
+			
+			select {
+			case resultChan <- results:
+			default:
+			}
+			return
+		}
+		defer releaseWorkerSlot()
+		
+		// 使用长超时客户端进行搜索
+		results, err := searchFunc(p.backgroundClient, keyword, ext)
+		if err != nil {
+			select {
+			case errorChan <- err:
+			default:
+			}
+		} else {
+			select {
+			case resultChan <- results:
+			default:
+			}
+		}
+	}()
+	
+	// 等待结果或超时
+	responseTimeout := defaultAsyncResponseTimeout
+	if config.AppConfig != nil {
+		responseTimeout = config.AppConfig.AsyncResponseTimeoutDur
+	}
+	
+	select {
+	case results := <-resultChan:
+		// 不直接关闭，让defer处理
+		
+		// 缓存结果
+		apiResponseCache.Store(pluginSpecificCacheKey, cachedResponse{
+			Results:     results,
+			Timestamp:   now,
+			Complete:    true, // 🔥 及时完成，标记为完整结果
+			LastAccess:  now,
+			AccessCount: 1,
+		})
+		
+		// 🔧 恢复主缓存更新：使用统一的GOB序列化
+		// 传递原始数据，由主程序负责序列化
+		if mainCacheKey != "" && p.mainCacheUpdater != nil {
+			err := p.mainCacheUpdater(mainCacheKey, results, p.cacheTTL, true, p.currentKeyword)
+			if err != nil {
+				fmt.Printf("❌ [%s] 及时完成缓存更新失败: %s | 错误: %v\n", p.name, mainCacheKey, err)
+			}
+		}
+		
+		return model.PluginSearchResult{
+			Results:   results,
+			IsFinal:   true, // 🔥 及时完成，最终结果
+			Timestamp: now,
+			Source:    p.name,
+			Message:   "搜索完成",
+		}, nil
+		
+	case err := <-errorChan:
+		// 不直接关闭，让defer处理
+		return model.PluginSearchResult{}, err
+		
+	case <-time.After(responseTimeout):
+		// 🔥 超时处理：返回空结果，后台继续处理
+		go p.completeSearchInBackground(keyword, searchFunc, pluginSpecificCacheKey, mainCacheKey, doneChan, ext)
+		
+		// 存储临时缓存（标记为不完整）
+		apiResponseCache.Store(pluginSpecificCacheKey, cachedResponse{
+			Results:     []model.SearchResult{},
+			Timestamp:   now,
+			Complete:    false, // 🔥 标记为不完整
+			LastAccess:  now,
+			AccessCount: 1,
+		})
+		
+		return model.PluginSearchResult{
+			Results:   []model.SearchResult{},
+			IsFinal:   false, // 🔥 超时返回，非最终结果
+			Timestamp: now,
+			Source:    p.name,
+			Message:   "处理中，后台继续...",
+		}, nil
+	}
+}
+
+// completeSearchInBackground 后台完成搜索
+func (p *BaseAsyncPlugin) completeSearchInBackground(
+	keyword string,
+	searchFunc func(*http.Client, string, map[string]interface{}) ([]model.SearchResult, error),
+	pluginCacheKey string,
+	mainCacheKey string,
+	doneChan chan struct{},
+	ext map[string]interface{},
+) {
+	defer func() {
+		select {
+		case <-doneChan:
+		default:
+			close(doneChan)
+		}
+	}()
+	
+	// 执行完整搜索
+	results, err := searchFunc(p.backgroundClient, keyword, ext)
+	if err != nil {
+		return
+	}
+	
+	// 更新插件缓存
+	now := time.Now()
+	apiResponseCache.Store(pluginCacheKey, cachedResponse{
+		Results:     results,
+		Timestamp:   now,
+		Complete:    true, // 🔥 标记为完整结果
+		LastAccess:  now,
+		AccessCount: 1,
+	})
+	
+	// 🔧 恢复主缓存更新：使用统一的GOB序列化
+	// 传递原始数据，由主程序负责序列化
+	if mainCacheKey != "" && p.mainCacheUpdater != nil {
+		err := p.mainCacheUpdater(mainCacheKey, results, p.cacheTTL, true, p.currentKeyword)
+		if err != nil {
+			fmt.Printf("❌ [%s] 后台完成缓存更新失败: %s | 错误: %v\n", p.name, mainCacheKey, err)
+		}
 	}
 }
 
@@ -834,41 +752,57 @@ func (p *BaseAsyncPlugin) refreshCacheInBackground(
 		AccessCount: oldCache.AccessCount,
 	})
 	
-	// 更新主缓存系统
-	// 使用传入的originalCacheKey，直接传递给updateMainCache
-	p.updateMainCache(originalCacheKey, mergedResults)
+	// 🔥 异步插件后台刷新完成时更新主缓存（标记为最终结果）
+	p.updateMainCacheWithFinal(originalCacheKey, mergedResults, true)
 	
 	// 记录刷新时间
 	refreshTime := time.Since(refreshStart)
 	fmt.Printf("[%s] 后台刷新完成: %s (耗时: %v, 新项目: %d, 合并项目: %d)\n", 
 		p.name, cacheKey, refreshTime, len(results), len(mergedResults))
 	
-	// 添加随机延迟，避免多个goroutine同时调用saveCacheToDisk
-	time.Sleep(time.Duration(100+rand.Intn(500)) * time.Millisecond)
-	
-	// 更新缓存后立即触发保存
-	go saveCacheToDisk()
+	// 异步插件本地缓存系统已移除
 } 
 
-// updateMainCache 更新主缓存系统
+// updateMainCache 更新主缓存系统（兼容性方法，默认IsFinal=true）
 func (p *BaseAsyncPlugin) updateMainCache(cacheKey string, results []model.SearchResult) {
+	p.updateMainCacheWithFinal(cacheKey, results, true)
+}
+
+// updateMainCacheWithFinal 更新主缓存系统，支持IsFinal参数
+func (p *BaseAsyncPlugin) updateMainCacheWithFinal(cacheKey string, results []model.SearchResult, isFinal bool) {
 	// 如果主缓存更新函数为空或缓存键为空，直接返回
 	if p.mainCacheUpdater == nil || cacheKey == "" {
 		return
 	}
 	
-	// 序列化结果
-	data, err := json.Marshal(results)
-	if err != nil {
-		fmt.Printf("[%s] 序列化结果失败: %v\n", p.name, err)
-		return
+	// 🔥 防止重复更新导致LRU缓存淘汰的优化
+	// 如果是最终结果，检查缓存中是否已经存在相同的最终结果
+	// 使用全局缓存键追踪已更新的最终结果
+	updateKey := fmt.Sprintf("final_updated_%s_%s", p.name, cacheKey)
+	
+	if isFinal {
+		if p.hasUpdatedFinalCache(updateKey) {
+			// 已经更新过最终结果，跳过重复更新
+			return
+		}
+		// 标记已更新
+		p.markFinalCacheUpdated(updateKey)
+	} else {
+		// 🔧 修复：如果已经有最终结果，不允许部分结果覆盖
+		if p.hasUpdatedFinalCache(updateKey) {
+			return
+		}
 	}
 	
-	// 调用主缓存更新函数
-	if err := p.mainCacheUpdater(cacheKey, data, p.cacheTTL); err != nil {
-		fmt.Printf("[%s] 更新主缓存失败: %v\n", p.name, err)
-	} else {
-		fmt.Printf("[%s] 成功更新主缓存: %s\n", p.name, cacheKey)
+	// 缓存更新时机验证（优化完成，日志简化）
+	
+	// 🔧 恢复异步插件缓存更新，使用修复后的统一序列化
+	// 传递原始数据，由主程序负责GOB序列化
+	if p.mainCacheUpdater != nil {
+		err := p.mainCacheUpdater(cacheKey, results, p.cacheTTL, isFinal, p.currentKeyword)
+		if err != nil {
+			fmt.Printf("❌ [%s] 主缓存更新失败: %s | 错误: %v\n", p.name, cacheKey, err)
+		}
 	}
 } 
 
@@ -913,4 +847,40 @@ func (p *BaseAsyncPlugin) FilterResultsByKeyword(results []model.SearchResult, k
 // GetClient 返回短超时客户端
 func (p *BaseAsyncPlugin) GetClient() *http.Client {
 	return p.client
+}
+
+// hasUpdatedFinalCache 检查是否已经更新过指定的最终结果缓存
+func (p *BaseAsyncPlugin) hasUpdatedFinalCache(updateKey string) bool {
+	p.finalUpdateMutex.RLock()
+	defer p.finalUpdateMutex.RUnlock()
+	return p.finalUpdateTracker[updateKey]
+}
+
+// markFinalCacheUpdated 标记已更新指定的最终结果缓存
+func (p *BaseAsyncPlugin) markFinalCacheUpdated(updateKey string) {
+	p.finalUpdateMutex.Lock()
+	defer p.finalUpdateMutex.Unlock()
+	p.finalUpdateTracker[updateKey] = true
+}
+
+// 全局序列化器引用（由主程序设置）
+var globalCacheSerializer interface {
+	Serialize(interface{}) ([]byte, error)
+	Deserialize([]byte, interface{}) error
+}
+
+// SetGlobalCacheSerializer 设置全局缓存序列化器（由主程序调用）
+func SetGlobalCacheSerializer(serializer interface {
+	Serialize(interface{}) ([]byte, error)
+	Deserialize([]byte, interface{}) error
+}) {
+	globalCacheSerializer = serializer
+}
+
+// getEnhancedCacheSerializer 获取增强缓存的序列化器
+func getEnhancedCacheSerializer() interface {
+	Serialize(interface{}) ([]byte, error)
+	Deserialize([]byte, interface{}) error
+} {
+	return globalCacheSerializer
 } 

@@ -92,10 +92,18 @@ func startCacheCleaner() {
 	}
 }
 
-// Search 执行搜索并返回结果
+// Search 执行搜索并返回结果（兼容性方法）
 func (p *XuexizhinanPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
-	// 使用保存的主缓存键
-	return p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey, ext)
+	result, err := p.SearchWithResult(keyword, ext)
+	if err != nil {
+		return nil, err
+	}
+	return result.Results, nil
+}
+
+// SearchWithResult 执行搜索并返回包含IsFinal标记的结果
+func (p *XuexizhinanPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
+	return p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
 }
 
 // doSearch 实际的搜索实现

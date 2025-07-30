@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -96,9 +95,9 @@ var (
 	buildIdMutex     sync.RWMutex
 )
 
-// PanSearchPlugin 盘搜插件
-type PanSearchPlugin struct {
-	client        *http.Client
+// PanSearchAsyncPlugin 盘搜异步插件
+type PanSearchAsyncPlugin struct {
+	*plugin.BaseAsyncPlugin
 	timeout       time.Duration
 	maxResults    int
 	maxConcurrent int
@@ -231,42 +230,18 @@ func (wp *WorkerPool) Close() {
 	}
 }
 
-// NewPanSearchPlugin 创建新的盘搜插件
-func NewPanSearchPlugin() *PanSearchPlugin {
+// NewPanSearchPlugin 创建新的盘搜异步插件
+func NewPanSearchPlugin() *PanSearchAsyncPlugin {
 	timeout := DefaultTimeout
-
-	// 创建自定义 Transport 以优化连接池
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 60 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          MaxIdleConns,
-		MaxIdleConnsPerHost:   MaxIdleConnsPerHost,
-		MaxConnsPerHost:       MaxConnsPerHost,
-		IdleConnTimeout:       IdleConnTimeout,
-		TLSHandshakeTimeout:   TLSHandshakeTimeout,
-		ExpectContinueTimeout: ExpectContinueTimeout,
-		WriteBufferSize:       WriteBufferSize,
-		ReadBufferSize:        ReadBufferSize,
-		DisableKeepAlives:     false,
-	}
-
 	maxConcurrent := MaxConcurrent
 
-	p := &PanSearchPlugin{
-		client: &http.Client{
-			Transport: transport,
-			Timeout:   timeout,
-		},
-		timeout:       timeout,
-		maxResults:    MaxResults,
-		maxConcurrent: maxConcurrent,
-		retries:       MaxRetries,
-		workerPool:    NewWorkerPool(maxConcurrent), // 初始化工作池
+	p := &PanSearchAsyncPlugin{
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pansearch", 4),
+		timeout:         timeout,
+		maxResults:      MaxResults,
+		maxConcurrent:   maxConcurrent,
+		retries:         MaxRetries,
+		workerPool:      NewWorkerPool(maxConcurrent), // 初始化工作池
 	}
 
 	// 初始化时预热获取 buildId
@@ -284,7 +259,7 @@ func NewPanSearchPlugin() *PanSearchPlugin {
 }
 
 // startBuildIdUpdater 启动一个定期更新 buildId 的后台协程
-func (p *PanSearchPlugin) startBuildIdUpdater() {
+func (p *PanSearchAsyncPlugin) startBuildIdUpdater() {
 	// 每10分钟更新一次 buildId
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
@@ -295,7 +270,7 @@ func (p *PanSearchPlugin) startBuildIdUpdater() {
 }
 
 // updateBuildId 更新 buildId 缓存
-func (p *PanSearchPlugin) updateBuildId() {
+func (p *PanSearchAsyncPlugin) updateBuildId() {
 	// 创建带超时的上下文
 	ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 	defer cancel()
@@ -315,7 +290,7 @@ func (p *PanSearchPlugin) updateBuildId() {
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 	req.Header.Set("Cache-Control", "max-age=0")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.GetClient().Do(req)
 	if err != nil {
 		fmt.Printf("请求失败: %v\n", err)
 		return
@@ -380,17 +355,17 @@ func extractBuildId(body string) string {
 }
 
 // Name 返回插件名称
-func (p *PanSearchPlugin) Name() string {
+func (p *PanSearchAsyncPlugin) Name() string {
 	return "pansearch"
 }
 
 // Priority 返回插件优先级
-func (p *PanSearchPlugin) Priority() int {
+func (p *PanSearchAsyncPlugin) Priority() int {
 	return 3 // 中等优先级
 }
 
 // getBuildId 获取buildId，优先使用缓存
-func (p *PanSearchPlugin) getBuildId() (string, error) {
+func (p *PanSearchAsyncPlugin) getBuildId() (string, error) {
 	// 检查缓存是否有效
 	buildIdMutex.RLock()
 	if buildIdCache != "" && time.Since(buildIdCacheTime) < BuildIdCacheDuration*time.Minute {
@@ -442,7 +417,7 @@ func (p *PanSearchPlugin) getBuildId() (string, error) {
 			time.Sleep(backoffTime)
 		}
 
-		resp, respErr = p.client.Do(req)
+		resp, respErr = p.GetClient().Do(req)
 		if respErr == nil && resp.StatusCode == 200 {
 			break
 		}
@@ -504,7 +479,7 @@ func (p *PanSearchPlugin) getBuildId() (string, error) {
 }
 
 // getBaseURL 获取完整的API基础URL
-func (p *PanSearchPlugin) getBaseURL() (string, error) {
+func (p *PanSearchAsyncPlugin) getBaseURL(client *http.Client) (string, error) {
 	buildId, err := p.getBuildId()
 	if err != nil {
 		return "", err
@@ -513,28 +488,30 @@ func (p *PanSearchPlugin) getBaseURL() (string, error) {
 	return fmt.Sprintf(BaseURLTemplate, buildId), nil
 }
 
-// Search 执行搜索并返回结果
-func (p *PanSearchPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
-	// 生成缓存键
-	cacheKey := keyword
-	
-	// 检查缓存中是否已有结果
-	if cachedItems, ok := searchResultCache.Load(cacheKey); ok {
-		// 检查缓存是否过期
-		cachedResult := cachedItems.(cachedResponse)
-		if time.Since(cachedResult.timestamp) < cacheTTL {
-			return cachedResult.results, nil
-		}
+// Search 执行搜索并返回结果（兼容性方法）
+func (p *PanSearchAsyncPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	result, err := p.SearchWithResult(keyword, ext)
+	if err != nil {
+		return nil, err
 	}
-	
+	return result.Results, nil
+}
+
+// SearchWithResult 执行搜索并返回包含IsFinal标记的结果
+func (p *PanSearchAsyncPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
+	return p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
+}
+
+// doSearch 执行具体的搜索逻辑
+func (p *PanSearchAsyncPlugin) doSearch(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 获取API基础URL
-	baseURL, err := p.getBaseURL()
+	baseURL, err := p.getBaseURL(client)
 	if err != nil {
 		return nil, fmt.Errorf("获取API基础URL失败: %w", err)
 	}
 
 	// 1. 发起首次请求获取total和第一页数据
-	firstPageResults, total, err := p.fetchFirstPage(keyword, baseURL)
+	firstPageResults, total, err := p.fetchFirstPage(keyword, baseURL, client)
 	if err != nil {
 		// 如果返回404错误，可能是buildId过期，尝试强制刷新buildId
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
@@ -547,13 +524,13 @@ func (p *PanSearchPlugin) Search(keyword string, ext map[string]interface{}) ([]
 			buildIdMutex.Unlock()
 
 			// 重新获取buildId
-			baseURL, err = p.getBaseURL()
+			baseURL, err = p.getBaseURL(client)
 			if err != nil {
 				return nil, fmt.Errorf("刷新buildId失败: %w", err)
 			}
 
 			// 重试请求
-			firstPageResults, total, err = p.fetchFirstPage(keyword, baseURL)
+			firstPageResults, total, err = p.fetchFirstPage(keyword, baseURL, client)
 			if err != nil {
 				return nil, fmt.Errorf("刷新buildId后获取首页仍然失败: %w", err)
 			}
@@ -573,7 +550,7 @@ func (p *PanSearchPlugin) Search(keyword string, ext map[string]interface{}) ([]
 		results := p.convertResults(allResults, keyword)
 		
 		// 缓存结果
-		searchResultCache.Store(cacheKey, cachedResponse{
+		searchResultCache.Store(keyword, cachedResponse{
 			results:   results,
 			timestamp: time.Now(),
 		})
@@ -589,7 +566,7 @@ func (p *PanSearchPlugin) Search(keyword string, ext map[string]interface{}) ([]
 		results := p.convertResults(allResults, keyword)
 		
 		// 缓存结果
-		searchResultCache.Store(cacheKey, cachedResponse{
+		searchResultCache.Store(keyword, cachedResponse{
 			results:   results,
 			timestamp: time.Now(),
 		})
@@ -775,7 +752,7 @@ CollectResults:
 			results := p.convertResults(allResults, keyword)
 			
 			// 缓存结果（即使超时也缓存已获取的结果）
-			searchResultCache.Store(cacheKey, cachedResponse{
+			searchResultCache.Store(keyword, cachedResponse{
 				results:   results,
 				timestamp: time.Now(),
 			})
@@ -790,7 +767,7 @@ ProcessResults:
 		results := p.convertResults(allResults, keyword)
 		
 		// 缓存结果（即使有错误也缓存已获取的结果）
-		searchResultCache.Store(cacheKey, cachedResponse{
+		searchResultCache.Store(keyword, cachedResponse{
 			results:   results,
 			timestamp: time.Now(),
 		})
@@ -803,7 +780,7 @@ ProcessResults:
 	results := p.convertResults(uniqueResults, keyword)
 	
 	// 缓存结果
-	searchResultCache.Store(cacheKey, cachedResponse{
+	searchResultCache.Store(keyword, cachedResponse{
 		results:   results,
 		timestamp: time.Now(),
 	})
@@ -812,7 +789,7 @@ ProcessResults:
 }
 
 // fetchFirstPage 获取第一页结果和总数
-func (p *PanSearchPlugin) fetchFirstPage(keyword string, baseURL string) ([]PanSearchItem, int, error) {
+func (p *PanSearchAsyncPlugin) fetchFirstPage(keyword string, baseURL string, client *http.Client) ([]PanSearchItem, int, error) {
 	// 构建请求URL
 	reqURL := fmt.Sprintf("%s?keyword=%s&offset=0", baseURL, url.QueryEscape(keyword))
 
@@ -836,7 +813,7 @@ func (p *PanSearchPlugin) fetchFirstPage(keyword string, baseURL string) ([]PanS
 	req.Header.Set("Pragma", "no-cache")
 
 	// 发送请求
-	resp, err := p.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("请求失败: %w", err)
 	}
@@ -871,7 +848,7 @@ func (p *PanSearchPlugin) fetchFirstPage(keyword string, baseURL string) ([]PanS
 }
 
 // fetchPage 获取指定偏移量的页面
-func (p *PanSearchPlugin) fetchPage(keyword string, offset int, baseURL string) ([]PanSearchItem, error) {
+func (p *PanSearchAsyncPlugin) fetchPage(keyword string, offset int, baseURL string) ([]PanSearchItem, error) {
 	// 构建请求URL
 	reqURL := fmt.Sprintf("%s?keyword=%s&offset=%d", baseURL, url.QueryEscape(keyword), offset)
 
@@ -895,7 +872,7 @@ func (p *PanSearchPlugin) fetchPage(keyword string, offset int, baseURL string) 
 	req.Header.Set("Pragma", "no-cache")
 
 	// 发送请求
-	resp, err := p.client.Do(req)
+	resp, err := p.GetClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
@@ -926,7 +903,7 @@ func (p *PanSearchPlugin) fetchPage(keyword string, offset int, baseURL string) 
 }
 
 // deduplicateItems 去重处理
-func (p *PanSearchPlugin) deduplicateItems(items []PanSearchItem) []PanSearchItem {
+func (p *PanSearchAsyncPlugin) deduplicateItems(items []PanSearchItem) []PanSearchItem {
 	// 使用map进行去重，键为资源ID
 	uniqueMap := make(map[int]PanSearchItem)
 
@@ -944,7 +921,7 @@ func (p *PanSearchPlugin) deduplicateItems(items []PanSearchItem) []PanSearchIte
 }
 
 // convertResults 将API响应转换为标准SearchResult格式
-func (p *PanSearchPlugin) convertResults(items []PanSearchItem, keyword string) []model.SearchResult {
+func (p *PanSearchAsyncPlugin) convertResults(items []PanSearchItem, keyword string) []model.SearchResult {
 	results := make([]model.SearchResult, 0, len(items))
 
 	for _, item := range items {

@@ -38,6 +38,7 @@ type Config struct {
 	AsyncMaxBackgroundWorkers int           // 最大后台工作者数量
 	AsyncMaxBackgroundTasks   int           // 最大后台任务数量
 	AsyncCacheTTLHours        int           // 异步缓存有效期（小时）
+	AsyncLogEnabled           bool          // 是否启用异步插件详细日志
 	// HTTP服务器配置
 	HTTPReadTimeout  time.Duration // 读取超时
 	HTTPWriteTimeout time.Duration // 写入超时
@@ -81,6 +82,7 @@ func Init() {
 		AsyncMaxBackgroundWorkers: getAsyncMaxBackgroundWorkers(),
 		AsyncMaxBackgroundTasks:   getAsyncMaxBackgroundTasks(),
 		AsyncCacheTTLHours:        getAsyncCacheTTLHours(),
+		AsyncLogEnabled:           getAsyncLogEnabled(),
 		// HTTP服务器配置
 		HTTPReadTimeout:  getHTTPReadTimeout(),
 		HTTPWriteTimeout: getHTTPWriteTimeout(),
@@ -451,6 +453,19 @@ func getHTTPMaxConns() int {
 	}
 	
 	return maxConns
+}
+
+// 从环境变量获取异步插件日志开关，如果未设置则使用默认值
+func getAsyncLogEnabled() bool {
+	logEnv := os.Getenv("ASYNC_LOG_ENABLED")
+	if logEnv == "" {
+		return true // 默认启用日志
+	}
+	enabled, err := strconv.ParseBool(logEnv)
+	if err != nil {
+		return true // 解析失败时默认启用
+	}
+	return enabled
 }
 
 // 应用GC设置

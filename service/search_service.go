@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sort"
@@ -21,6 +22,37 @@ import (
 // 优先关键词列表
 var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附"}
 
+// extractKeywordFromCacheKey 从缓存键中提取关键词（简化版）
+func extractKeywordFromCacheKey(cacheKey string) string {
+	// 这是一个简化的实现，实际中我们会通过传递来获得关键词
+	// 为了演示，这里返回简化的显示
+	return "搜索关键词"
+}
+
+// logAsyncCacheWithKeyword 异步缓存日志输出辅助函数（带关键词）
+func logAsyncCacheWithKeyword(keyword, cacheKey string, format string, args ...interface{}) {
+	// 检查配置开关
+	if config.AppConfig == nil || !config.AppConfig.AsyncLogEnabled {
+		return
+	}
+	
+	// 构建显示的关键词信息
+	displayKeyword := keyword
+	if displayKeyword == "" {
+		displayKeyword = "未知"
+	}
+	
+	// 将缓存键替换为简化版本+关键词
+	shortKey := cacheKey
+	if len(cacheKey) > 8 {
+		shortKey = cacheKey[:8] + "..."
+	}
+	
+	// 替换格式字符串中的缓存键
+	enhancedFormat := strings.Replace(format, cacheKey, fmt.Sprintf("%s(关键词:%s)", shortKey, displayKeyword), 1)
+	fmt.Printf(enhancedFormat, args...)
+}
+
 // 全局缓存实例和缓存是否初始化标志
 var (
 	enhancedTwoLevelCache *cache.EnhancedTwoLevelCache
@@ -37,6 +69,102 @@ func init() {
 			cacheInitialized = true
 		}
 	}
+}
+
+// mergeSearchResults 智能合并搜索结果，去重并保留最完整的信息
+func mergeSearchResults(existing []model.SearchResult, newResults []model.SearchResult) []model.SearchResult {
+	// 使用map进行去重和合并，以UniqueID作为唯一标识
+	resultMap := make(map[string]model.SearchResult)
+	
+	// 先添加现有结果
+	for _, result := range existing {
+		key := generateResultKey(result)
+		resultMap[key] = result
+	}
+	
+	// 合并新结果，如果UniqueID相同则选择信息更完整的
+	for _, newResult := range newResults {
+		key := generateResultKey(newResult)
+		if existingResult, exists := resultMap[key]; exists {
+			// 选择信息更完整的结果
+			resultMap[key] = selectBetterResult(existingResult, newResult)
+		} else {
+			// 新结果，直接添加
+			resultMap[key] = newResult
+		}
+	}
+	
+	// 转换回切片
+	merged := make([]model.SearchResult, 0, len(resultMap))
+	for _, result := range resultMap {
+		merged = append(merged, result)
+	}
+	
+	// 按时间排序（最新的在前）
+	sort.Slice(merged, func(i, j int) bool {
+		return merged[i].Datetime.After(merged[j].Datetime)
+	})
+	
+	return merged
+}
+
+// generateResultKey 生成结果的唯一标识键
+func generateResultKey(result model.SearchResult) string {
+	// 使用UniqueID作为主要标识，如果没有则使用MessageID，最后使用标题
+	if result.UniqueID != "" {
+		return result.UniqueID
+	}
+	if result.MessageID != "" {
+		return result.MessageID
+	}
+	return fmt.Sprintf("title_%s_%s", result.Title, result.Channel)
+}
+
+// selectBetterResult 选择信息更完整的结果
+func selectBetterResult(existing, new model.SearchResult) model.SearchResult {
+	// 计算信息完整度得分
+	existingScore := calculateCompletenessScore(existing)
+	newScore := calculateCompletenessScore(new)
+	
+	if newScore > existingScore {
+		return new
+	}
+	return existing
+}
+
+// calculateCompletenessScore 计算结果信息的完整度得分
+func calculateCompletenessScore(result model.SearchResult) int {
+	score := 0
+	
+	// 有UniqueID加分
+	if result.UniqueID != "" {
+		score += 10
+	}
+	
+	// 有链接信息加分
+	if len(result.Links) > 0 {
+		score += 5
+		// 每个链接额外加分
+		score += len(result.Links)
+	}
+	
+	// 有内容加分
+	if result.Content != "" {
+		score += 3
+	}
+	
+	// 标题长度加分（更详细的标题）
+	score += len(result.Title) / 10
+	
+	// 有频道信息加分
+	if result.Channel != "" {
+		score += 2
+	}
+	
+	// 有标签加分
+	score += len(result.Tags)
+	
+	return score
 }
 
 // SearchService 搜索服务
@@ -71,9 +199,91 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 		return
 	}
 	
-	// 创建缓存更新函数
-	cacheUpdater := func(key string, data []byte, ttl time.Duration) error {
-		return mainCache.Set(key, data, ttl)
+	// 🔧 设置全局序列化器，确保异步插件与主程序使用相同的序列化格式
+	serializer := mainCache.GetSerializer()
+	if serializer != nil {
+		plugin.SetGlobalCacheSerializer(serializer)
+	}
+	
+	// 创建缓存更新函数（支持IsFinal参数）- 接收原始数据并与现有缓存合并
+	cacheUpdater := func(key string, newResults []model.SearchResult, ttl time.Duration, isFinal bool, keyword string) error {
+		// 🔧 获取现有缓存数据进行合并
+		var finalResults []model.SearchResult
+		if existingData, hit, err := mainCache.Get(key); err == nil && hit {
+			var existingResults []model.SearchResult
+			if err := mainCache.GetSerializer().Deserialize(existingData, &existingResults); err == nil {
+				// 合并新旧结果，去重保留最完整的数据
+				finalResults = mergeSearchResults(existingResults, newResults)
+				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+					displayKey := key[:8] + "..."
+					if keyword != "" {
+						fmt.Printf("🔄 [异步插件] 缓存合并: %s(关键词:%s) | 原有: %d + 新增: %d = 合并后: %d\n", 
+							displayKey, keyword, len(existingResults), len(newResults), len(finalResults))
+					} else {
+						fmt.Printf("🔄 [异步插件] 缓存合并: %s | 原有: %d + 新增: %d = 合并后: %d\n", 
+							key, len(existingResults), len(newResults), len(finalResults))
+					}
+				}
+			} else {
+				// 反序列化失败，使用新结果
+				finalResults = newResults
+				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+					displayKey := key[:8] + "..."
+					if keyword != "" {
+						fmt.Printf("⚠️ [异步插件] 缓存反序列化失败，使用新结果: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(newResults))
+					} else {
+						fmt.Printf("⚠️ [异步插件] 缓存反序列化失败，使用新结果: %s | 结果数: %d\n", key, len(newResults))
+					}
+				}
+			}
+		} else {
+			// 无现有缓存，直接使用新结果
+			finalResults = newResults
+			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+				displayKey := key[:8] + "..."
+				if keyword != "" {
+					fmt.Printf("📝 [异步插件] 初始缓存创建: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(newResults))
+				} else {
+					fmt.Printf("📝 [异步插件] 初始缓存创建: %s | 结果数: %d\n", key, len(newResults))
+				}
+			}
+		}
+		
+		// 🔧 序列化合并后的结果
+		data, err := mainCache.GetSerializer().Serialize(finalResults)
+		if err != nil {
+			fmt.Printf("❌ [缓存更新] 序列化失败: %s | 错误: %v\n", key, err)
+			return err
+		}
+		
+		// 🔥 根据IsFinal参数选择缓存更新策略
+		if isFinal {
+			// 最终结果：更新内存+磁盘缓存
+			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+				displayKey := key[:8] + "..."
+				if keyword != "" {
+					fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
+						displayKey, keyword, len(finalResults), len(data))
+				} else {
+					fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
+						key, len(finalResults), len(data))
+				}
+			}
+			return mainCache.SetBothLevels(key, data, ttl)
+		} else {
+			// 部分结果：仅更新内存缓存
+			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+				displayKey := key[:8] + "..."
+				if keyword != "" {
+					fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
+						displayKey, keyword, len(finalResults), len(data))
+				} else {
+					fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
+						key, len(finalResults), len(data))
+				}
+			}
+			return mainCache.SetMemoryOnly(key, data, ttl)
+		}
 	}
 	
 	// 获取所有插件
@@ -81,8 +291,8 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 	
 	// 遍历所有插件，找出异步插件
 	for _, p := range plugins {
-		// 检查插件是否实现了SetMainCacheUpdater方法
-		if asyncPlugin, ok := p.(interface{ SetMainCacheUpdater(func(string, []byte, time.Duration) error) }); ok {
+		// 检查插件是否实现了SetMainCacheUpdater方法（修复后的签名，增加关键词参数）
+		if asyncPlugin, ok := p.(interface{ SetMainCacheUpdater(func(string, []model.SearchResult, time.Duration, bool, string) error) }); ok {
 			// 注入缓存更新函数
 			asyncPlugin.SetMainCacheUpdater(cacheUpdater)
 		}
@@ -893,6 +1103,7 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 	// 生成缓存键
 	cacheKey := cache.GeneratePluginCacheKey(keyword, plugins)
 	
+	
 	// 如果未启用强制刷新，尝试从缓存获取结果
 	if !forceRefresh && cacheInitialized && config.AppConfig.CacheEnabled {
 		var data []byte
@@ -906,19 +1117,30 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			// 如果磁盘缓存比内存缓存更新，会自动更新内存缓存并返回最新数据
 			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
 			
+			// 🔍 添加缓存状态调试日志
+			displayKey := cacheKey[:8] + "..."
+			fmt.Printf("🔍 [主服务] 缓存检查: %s(关键词:%s) | 命中: %v | 错误: %v | 数据长度: %d\n", 
+				displayKey, keyword, hit, err, len(data))
+			
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
 					// 返回缓存数据
+					displayKey := cacheKey[:8] + "..."
+					fmt.Printf("✅ [主服务] 缓存命中返回: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(results))
 					return results, nil
+				} else {
+					displayKey := cacheKey[:8] + "..."
+					fmt.Printf("❌ [主服务] 缓存反序列化失败: %s(关键词:%s) | 错误: %v\n", displayKey, keyword, err)
 				}
 			}
 		}
 	}
 	
 	// 缓存未命中或强制刷新，执行实际搜索
+	
 	// 获取所有可用插件
-	var availablePlugins []plugin.SearchPlugin
+	var availablePlugins []plugin.AsyncSearchPlugin
 	if s.pluginManager != nil {
 		allPlugins := s.pluginManager.GetPlugins()
 		
@@ -966,32 +1188,20 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 	for _, p := range availablePlugins {
 		plugin := p // 创建副本，避免闭包问题
 		tasks = append(tasks, func() interface{} {
-			// 检查插件是否为异步插件
-			if asyncPlugin, ok := plugin.(interface {
-				AsyncSearch(keyword string, searchFunc func(*http.Client, string, map[string]interface{}) ([]model.SearchResult, error), mainCacheKey string, ext map[string]interface{}) ([]model.SearchResult, error)
-				SetMainCacheKey(string)
-			}); ok {
-				// 先设置主缓存键
-				asyncPlugin.SetMainCacheKey(cacheKey)
-				
-				// 是异步插件，调用AsyncSearch方法并传递主缓存键和ext参数
-				results, err := asyncPlugin.AsyncSearch(keyword, func(client *http.Client, kw string, extParams map[string]interface{}) ([]model.SearchResult, error) {
-					// 这里使用插件的Search方法作为搜索函数，传递ext参数
-					return plugin.Search(kw, extParams)
-				}, cacheKey, ext)
-				
-				if err != nil {
-					return nil
-				}
-				return results
-			} else {
-				// 不是异步插件，直接调用Search方法，传递ext参数
-				results, err := plugin.Search(keyword, ext)
-				if err != nil {
-					return nil
-				}
-				return results
+			// 设置主缓存键和当前关键词
+			plugin.SetMainCacheKey(cacheKey)
+			plugin.SetCurrentKeyword(keyword)
+			
+			// 调用异步插件的AsyncSearch方法
+			results, err := plugin.AsyncSearch(keyword, func(client *http.Client, kw string, extParams map[string]interface{}) ([]model.SearchResult, error) {
+				// 使用插件的Search方法作为搜索函数
+				return plugin.Search(kw, extParams)
+			}, cacheKey, ext)
+			
+			if err != nil {
+				return nil
 			}
+			return results
 		})
 	}
 	
@@ -1007,61 +1217,33 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 		}
 	}
 	
-	// 异步缓存结果
+	// 🔧 恢复主程序缓存更新：确保最终合并结果被正确缓存
 	if cacheInitialized && config.AppConfig.CacheEnabled {
-		go func(res []model.SearchResult) {
+		go func(res []model.SearchResult, kw string, key string) {
 			ttl := time.Duration(config.AppConfig.CacheTTLMinutes) * time.Minute
 			
-			// 使用增强版缓存
+			// 使用增强版缓存，确保与异步插件使用相同的序列化器
 			if enhancedTwoLevelCache != nil {
 				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
 				if err != nil {
+					fmt.Printf("❌ [主程序] 缓存序列化失败: %s | 错误: %v\n", key, err)
 					return
 				}
-				enhancedTwoLevelCache.Set(cacheKey, data, ttl)
+				
+				// 主程序最后更新，覆盖可能有问题的异步插件缓存
+				enhancedTwoLevelCache.Set(key, data, ttl)
+				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d | 数据长度: %d\n", 
+						key, len(res), len(data))
+				}
 			}
-		}(allResults)
+		}(allResults, keyword, cacheKey)
 	}
 	
 	return allResults, nil
 }
 
-// 合并搜索结果
-func mergeSearchResults(tgResults, pluginResults []model.SearchResult) []model.SearchResult {
-	// 预估合并后的结果数量
-	totalSize := len(tgResults) + len(pluginResults)
-	if totalSize == 0 {
-		return []model.SearchResult{}
-	}
-	
-	// 创建结果映射，用于去重
-	resultMap := make(map[string]model.SearchResult, totalSize)
-	
-	// 添加TG搜索结果
-	for _, result := range tgResults {
-		resultMap[result.UniqueID] = result
-	}
-	
-	// 添加或更新插件搜索结果（如果有重复，保留较新的）
-	for _, result := range pluginResults {
-		if existing, ok := resultMap[result.UniqueID]; ok {
-			// 如果已存在，保留较新的
-			if result.Datetime.After(existing.Datetime) {
-				resultMap[result.UniqueID] = result
-			}
-		} else {
-			resultMap[result.UniqueID] = result
-		}
-	}
-	
-	// 转换回切片
-	mergedResults := make([]model.SearchResult, 0, len(resultMap))
-	for _, result := range resultMap {
-		mergedResults = append(mergedResults, result)
-	}
-	
-	return mergedResults
-}
+
 
 // GetPluginManager 获取插件管理器
 func (s *SearchService) GetPluginManager() *plugin.PluginManager {

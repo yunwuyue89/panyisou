@@ -1,34 +1,42 @@
 package plugin
 
 import (
+	"net/http"
 	"strings"
 	"sync"
 
 	"pansou/model"
 )
 
-// 全局插件注册表
+// 全局异步插件注册表
 var (
-	globalRegistry     = make(map[string]SearchPlugin)
+	globalRegistry     = make(map[string]AsyncSearchPlugin)
 	globalRegistryLock sync.RWMutex
 )
 
-// SearchPlugin 搜索插件接口
-type SearchPlugin interface {
+// AsyncSearchPlugin 异步搜索插件接口
+type AsyncSearchPlugin interface {
 	// Name 返回插件名称
 	Name() string
 	
-	// Search 执行搜索并返回结果
-	// ext参数用于传递额外的搜索参数，插件可以根据需要使用或忽略
-	Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error)
-	
-	// Priority 返回插件优先级（可选，用于控制结果排序）
+	// Priority 返回插件优先级
 	Priority() int
+	
+	// AsyncSearch 异步搜索方法
+	AsyncSearch(keyword string, searchFunc func(*http.Client, string, map[string]interface{}) ([]model.SearchResult, error), mainCacheKey string, ext map[string]interface{}) ([]model.SearchResult, error)
+	
+	// SetMainCacheKey 设置主缓存键
+	SetMainCacheKey(key string)
+	
+	// SetCurrentKeyword 设置当前搜索关键词（用于日志显示）
+	SetCurrentKeyword(keyword string)
+	
+	// Search 兼容性方法（内部调用AsyncSearch）
+	Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error)
 }
 
-// RegisterGlobalPlugin 注册插件到全局注册表
-// 这个函数应该在每个插件的init函数中被调用
-func RegisterGlobalPlugin(plugin SearchPlugin) {
+// RegisterGlobalPlugin 注册异步插件到全局注册表
+func RegisterGlobalPlugin(plugin AsyncSearchPlugin) {
 	if plugin == nil {
 		return
 	}
@@ -44,12 +52,12 @@ func RegisterGlobalPlugin(plugin SearchPlugin) {
 	globalRegistry[name] = plugin
 }
 
-// GetRegisteredPlugins 获取所有已注册的插件
-func GetRegisteredPlugins() []SearchPlugin {
+// GetRegisteredPlugins 获取所有已注册的异步插件
+func GetRegisteredPlugins() []AsyncSearchPlugin {
 	globalRegistryLock.RLock()
 	defer globalRegistryLock.RUnlock()
 	
-	plugins := make([]SearchPlugin, 0, len(globalRegistry))
+	plugins := make([]AsyncSearchPlugin, 0, len(globalRegistry))
 	for _, plugin := range globalRegistry {
 		plugins = append(plugins, plugin)
 	}
@@ -57,37 +65,36 @@ func GetRegisteredPlugins() []SearchPlugin {
 	return plugins
 }
 
-// PluginManager 插件管理器
+// PluginManager 异步插件管理器
 type PluginManager struct {
-	plugins []SearchPlugin
+	plugins []AsyncSearchPlugin
 }
 
-// NewPluginManager 创建新的插件管理器
+// NewPluginManager 创建新的异步插件管理器
 func NewPluginManager() *PluginManager {
 	return &PluginManager{
-		plugins: make([]SearchPlugin, 0),
+		plugins: make([]AsyncSearchPlugin, 0),
 	}
 }
 
-// RegisterPlugin 注册插件
-func (pm *PluginManager) RegisterPlugin(plugin SearchPlugin) {
+// RegisterPlugin 注册异步插件
+func (pm *PluginManager) RegisterPlugin(plugin AsyncSearchPlugin) {
 	pm.plugins = append(pm.plugins, plugin)
 }
 
-// RegisterAllGlobalPlugins 注册所有全局插件
+// RegisterAllGlobalPlugins 注册所有全局异步插件
 func (pm *PluginManager) RegisterAllGlobalPlugins() {
 	for _, plugin := range GetRegisteredPlugins() {
 		pm.RegisterPlugin(plugin)
 	}
 }
 
-// GetPlugins 获取所有注册的插件
-func (pm *PluginManager) GetPlugins() []SearchPlugin {
+// GetPlugins 获取所有注册的异步插件
+func (pm *PluginManager) GetPlugins() []AsyncSearchPlugin {
 	return pm.plugins
-} 
+}
 
 // FilterResultsByKeyword 根据关键词过滤搜索结果的全局辅助函数
-// 供非BaseAsyncPlugin类型的插件使用
 func FilterResultsByKeyword(results []model.SearchResult, keyword string) []model.SearchResult {
 	if keyword == "" {
 		return results

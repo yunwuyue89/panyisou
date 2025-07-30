@@ -33,6 +33,9 @@ func NewEnhancedTwoLevelCache() (*EnhancedTwoLevelCache, error) {
 	// 创建序列化器
 	serializer := NewGobSerializer()
 
+	// 🔥 设置内存缓存的磁盘缓存引用，用于LRU淘汰时的备份
+	memCache.SetDiskCacheReference(diskCache)
+
 	return &EnhancedTwoLevelCache{
 		memory:     memCache,
 		disk:       diskCache,
@@ -55,6 +58,40 @@ func (c *EnhancedTwoLevelCache) Set(key string, data []byte, ttl time.Duration) 
 	}(key, data, ttl)
 	
 	return nil
+}
+
+// SetMemoryOnly 仅更新内存缓存
+func (c *EnhancedTwoLevelCache) SetMemoryOnly(key string, data []byte, ttl time.Duration) error {
+	now := time.Now()
+	
+	// 🔥 只更新内存缓存，不触发磁盘写入
+	c.memory.SetWithTimestamp(key, data, ttl, now)
+	
+	return nil
+}
+
+// SetBothLevels 更新内存和磁盘缓存
+func (c *EnhancedTwoLevelCache) SetBothLevels(key string, data []byte, ttl time.Duration) error {
+	now := time.Now()
+	
+	// 同步更新内存缓存
+	c.memory.SetWithTimestamp(key, data, ttl, now)
+	
+	// 异步更新磁盘缓存
+	go func(k string, d []byte, t time.Duration) {
+		_ = c.disk.Set(k, d, t)
+	}(key, data, ttl)
+	
+	return nil
+}
+
+// SetWithFinalFlag 根据结果状态选择更新策略
+func (c *EnhancedTwoLevelCache) SetWithFinalFlag(key string, data []byte, ttl time.Duration, isFinal bool) error {
+	if isFinal {
+		return c.SetBothLevels(key, data, ttl)
+	} else {
+		return c.SetMemoryOnly(key, data, ttl)
+	}
 }
 
 // Get 获取缓存

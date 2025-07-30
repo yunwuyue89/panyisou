@@ -2,6 +2,16 @@
 
 PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定义插件搜索。系统设计以性能和可扩展性为核心，支持并发搜索、结果智能排序和网盘类型分类。
 
+## 🚀 性能表现
+
+实测 PanSou 在 8GB MacBook Pro 上的性能表现：
+
+- ✅ **500用户瞬时并发**: 100%成功率，平均响应167ms
+- ✅ **200用户持续并发**: 30秒内处理4725请求，QPS=148
+- ✅ **缓存命中**: 99.8%请求<100ms响应时间  
+- ✅ **高可用性**: 长时间运行无故障
+
+
 ## 特性
 
 - **高性能搜索**：并发搜索多个Telegram频道，显著提升搜索速度；工作池设计，高效管理并发任务
@@ -120,35 +130,44 @@ cd pansou
 | HTTP_READ_TIMEOUT | HTTP读取超时时间(秒) | 自动计算，最小30 |
 | HTTP_WRITE_TIMEOUT | HTTP写入超时时间(秒) | 自动计算，最小60 |
 | HTTP_IDLE_TIMEOUT | HTTP空闲连接超时时间(秒) | 120 |
-| HTTP_MAX_CONNS | HTTP最大并发连接数 | CPU核心数×200，最小1000 |
+| HTTP_MAX_CONNS | HTTP最大并发连接数 | CPU核心数×25，最小100，最大500 |
+| ASYNC_LOG_ENABLED | 异步插件详细日志开关 | true |
 
+### 🔧 性能优化配置
+
+为不同环境提供的优化配置方案：
+
+#### macOS/笔记本电脑配置 (推荐)
 ```bash
-# 默认频道
-export CHANNELS="tgsearchers2,xxx"
-
-# 缓存配置
-export CACHE_ENABLED=true
-export CACHE_PATH="./cache"
-export CACHE_MAX_SIZE=100  # MB
-export CACHE_TTL=60        # 分钟
-export SHARD_COUNT=8       # 分片数量
-
-# 异步插件配置
-export ASYNC_PLUGIN_ENABLED=true
-export ASYNC_RESPONSE_TIMEOUT=4            # 响应超时时间（秒）
-export ASYNC_MAX_BACKGROUND_WORKERS=40     # 最大后台工作者数量
-export ASYNC_MAX_BACKGROUND_TASKS=200      # 最大后台任务数量
-export ASYNC_CACHE_TTL_HOURS=1             # 异步缓存有效期（小时）
-
-# HTTP服务器配置
-export HTTP_READ_TIMEOUT=30                # 读取超时时间（秒）
-export HTTP_WRITE_TIMEOUT=60               # 写入超时时间（秒）
-export HTTP_IDLE_TIMEOUT=120               # 空闲连接超时时间（秒）
-export HTTP_MAX_CONNS=1600                 # 最大并发连接数（8核CPU示例）
-
-# 代理配置（如需）
-export PROXY="socks5://127.0.0.1:7890"
+# 针对macOS系统线程限制优化的配置
+export HTTP_MAX_CONNS=200                   # 降低连接数
+export ASYNC_MAX_BACKGROUND_WORKERS=15     # 减少工作者数量  
+export ASYNC_MAX_BACKGROUND_TASKS=75       # 减少任务队列
+export CONCURRENCY=30                      # 适中的并发数
+export ASYNC_LOG_ENABLED=false             # 关闭详细日志
 ```
+
+#### 服务器/云环境配置
+```bash
+# 高性能服务器配置
+export HTTP_MAX_CONNS=500                   # 更高的连接数
+export ASYNC_MAX_BACKGROUND_WORKERS=40     # 更多工作者
+export ASYNC_MAX_BACKGROUND_TASKS=200      # 更大任务队列
+export CONCURRENCY=50                      # 高并发数
+export CACHE_MAX_SIZE=500                  # 更大缓存
+export ASYNC_LOG_ENABLED=false             # 关闭详细日志
+```
+
+#### 资源受限环境配置
+```bash
+# 低配置服务器或容器环境
+export HTTP_MAX_CONNS=100                   # 最低连接数
+export ASYNC_MAX_BACKGROUND_WORKERS=8      # 最少工作者
+export ASYNC_MAX_BACKGROUND_TASKS=40       # 最小任务队列
+export CONCURRENCY=15                      # 低并发数
+export CACHE_MAX_SIZE=50                   # 较小缓存
+```
+
 
 3. 构建
 

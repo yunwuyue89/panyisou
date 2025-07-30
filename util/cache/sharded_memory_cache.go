@@ -32,6 +32,8 @@ type ShardedMemoryCache struct {
 	maxSize   int64
 	itemsPerShard int
 	sizePerShard  int64
+	diskCache     *ShardedDiskCache // 🔥 新增：磁盘缓存引用
+	diskCacheMutex sync.RWMutex     // 🔥 新增：磁盘缓存引用的保护锁
 }
 
 // 创建新的分片内存缓存
@@ -198,23 +200,37 @@ func (c *ShardedMemoryCache) GetLastModified(key string) (time.Time, bool) {
 	return item.lastModified, true
 }
 
-// 从指定分片中驱逐最久未使用的项
+// 从指定分片中驱逐最久未使用的项（带磁盘备份）
 func (c *ShardedMemoryCache) evictFromShard(shard *memoryCacheShard) {
 	var oldestKey string
+	var oldestItem *shardedMemoryCacheItem
 	var oldestTime int64 = 9223372036854775807 // int64最大值
 	
 	for k, v := range shard.items {
 		lastUsed := atomic.LoadInt64(&v.lastUsed)
 		if lastUsed < oldestTime {
 			oldestKey = k
+			oldestItem = v
 			oldestTime = lastUsed
 		}
 	}
 	
 	// 如果找到了最久未使用的项，删除它
-	if oldestKey != "" {
-		item := shard.items[oldestKey]
-		atomic.AddInt64(&shard.currSize, -int64(item.size))
+	if oldestKey != "" && oldestItem != nil {
+		// 🔥 关键优化：淘汰前检查是否需要刷盘保护
+		diskCache := c.getDiskCacheReference()
+		if time.Now().Before(oldestItem.expiry) && diskCache != nil {
+			// 数据还没过期，异步刷新到磁盘保存
+			go func(key string, data []byte, expiry time.Time) {
+				ttl := time.Until(expiry)
+				if ttl > 0 {
+					diskCache.Set(key, data, ttl) // 🔥 保持相同TTL
+				}
+			}(oldestKey, oldestItem.data, oldestItem.expiry)
+		}
+		
+		// 从内存中删除
+		atomic.AddInt64(&shard.currSize, -int64(oldestItem.size))
 		delete(shard.items, oldestKey)
 	}
 }
@@ -281,4 +297,18 @@ func (c *ShardedMemoryCache) StartCleanupTask() {
 			c.CleanExpired()
 		}
 	}()
+}
+
+// SetDiskCacheReference 设置磁盘缓存引用
+func (c *ShardedMemoryCache) SetDiskCacheReference(diskCache *ShardedDiskCache) {
+	c.diskCacheMutex.Lock()
+	defer c.diskCacheMutex.Unlock()
+	c.diskCache = diskCache
+}
+
+// getDiskCacheReference 获取磁盘缓存引用
+func (c *ShardedMemoryCache) getDiskCacheReference() *ShardedDiskCache {
+	c.diskCacheMutex.RLock()
+	defer c.diskCacheMutex.RUnlock()
+	return c.diskCache
 }

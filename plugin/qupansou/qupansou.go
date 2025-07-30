@@ -59,62 +59,59 @@ const (
 	DefaultPageSize = 1000
 )
 
-// QuPanSouPlugin 趣盘搜插件
-type QuPanSouPlugin struct {
-	client  *http.Client
+// QuPanSouAsyncPlugin 趣盘搜异步插件
+type QuPanSouAsyncPlugin struct {
+	*plugin.BaseAsyncPlugin
 	timeout time.Duration
 }
 
-// NewQuPanSouPlugin 创建新的趣盘搜插件
-func NewQuPanSouPlugin() *QuPanSouPlugin {
+// NewQuPanSouPlugin 创建新的趣盘搜异步插件
+func NewQuPanSouPlugin() *QuPanSouAsyncPlugin {
 	timeout := DefaultTimeout
 	
-	return &QuPanSouPlugin{
-		client: &http.Client{
-			Timeout: timeout,
-		},
-		timeout: timeout,
+	return &QuPanSouAsyncPlugin{
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("qupansou", 3),
+		timeout:         timeout,
 	}
 }
 
+// 确保QuPanSouAsyncPlugin实现了AsyncSearchPlugin接口
+var _ plugin.AsyncSearchPlugin = (*QuPanSouAsyncPlugin)(nil)
+
 // Name 返回插件名称
-func (p *QuPanSouPlugin) Name() string {
+func (p *QuPanSouAsyncPlugin) Name() string {
 	return "qupansou"
 }
 
 // Priority 返回插件优先级
-func (p *QuPanSouPlugin) Priority() int {
+func (p *QuPanSouAsyncPlugin) Priority() int {
 	return 3 // 中等优先级
 }
 
-// Search 执行搜索并返回结果
-func (p *QuPanSouPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
-	// 生成缓存键
-	cacheKey := keyword
-	
-	// 检查缓存中是否已有结果
-	if cachedItems, ok := apiResponseCache.Load(cacheKey); ok {
-		// 检查缓存是否过期
-		cachedResult := cachedItems.(cachedResponse)
-		if time.Since(cachedResult.timestamp) < cacheTTL {
-			return cachedResult.results, nil
-		}
+// Search 执行搜索并返回结果（兼容性方法）
+func (p *QuPanSouAsyncPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	result, err := p.SearchWithResult(keyword, ext)
+	if err != nil {
+		return nil, err
 	}
-	
+	return result.Results, nil
+}
+
+// SearchWithResult 执行搜索并返回包含IsFinal标记的结果
+func (p *QuPanSouAsyncPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
+	return p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
+}
+
+// doSearch 执行具体的搜索逻辑
+func (p *QuPanSouAsyncPlugin) doSearch(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 发送API请求
-	items, err := p.searchAPI(keyword)
+	items, err := p.searchAPI(keyword, client)
 	if err != nil {
 		return nil, fmt.Errorf("qupansou API error: %w", err)
 	}
 	
 	// 转换为标准格式
 	results := p.convertResults(items)
-	
-	// 缓存结果
-	apiResponseCache.Store(cacheKey, cachedResponse{
-		results:   results,
-		timestamp: time.Now(),
-	})
 	
 	return results, nil
 }
@@ -126,7 +123,7 @@ type cachedResponse struct {
 }
 
 // searchAPI 向API发送请求
-func (p *QuPanSouPlugin) searchAPI(keyword string) ([]QuPanSouItem, error) {
+func (p *QuPanSouAsyncPlugin) searchAPI(keyword string, client *http.Client) ([]QuPanSouItem, error) {
 	// 构建请求体
 	reqBody := map[string]interface{}{
 		"style": "get",
@@ -168,7 +165,7 @@ func (p *QuPanSouPlugin) searchAPI(keyword string) ([]QuPanSouItem, error) {
 	req.Header.Set("Referer", "https://pan.funletu.com/")
 	
 	// 发送请求
-	resp, err := p.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -195,7 +192,7 @@ func (p *QuPanSouPlugin) searchAPI(keyword string) ([]QuPanSouItem, error) {
 }
 
 // convertResults 将API响应转换为标准SearchResult格式
-func (p *QuPanSouPlugin) convertResults(items []QuPanSouItem) []model.SearchResult {
+func (p *QuPanSouAsyncPlugin) convertResults(items []QuPanSouItem) []model.SearchResult {
 	results := make([]model.SearchResult, 0, len(items))
 	
 	for _, item := range items {
@@ -248,7 +245,7 @@ func (p *QuPanSouPlugin) convertResults(items []QuPanSouItem) []model.SearchResu
 }
 
 // determineLinkType 根据URL确定链接类型
-func (p *QuPanSouPlugin) determineLinkType(url string) string {
+func (p *QuPanSouAsyncPlugin) determineLinkType(url string) string {
 	lowerURL := strings.ToLower(url)
 	
 	if strings.Contains(lowerURL, "pan.baidu.com") {

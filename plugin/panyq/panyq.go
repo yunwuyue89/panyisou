@@ -173,8 +173,12 @@ func (p *PanyqPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 		}
 	}
 	
-	// 使用基础异步插件的搜索方法
-	results, err := p.AsyncSearch(keyword, p.doSearch, p.MainCacheKey, ext)
+	// 使用新的异步搜索方法
+	result, err := p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
+	if err != nil {
+		return nil, err
+	}
+	results := result.Results
 	
 	// 如果搜索成功，缓存结果
 	if err == nil && len(results) > 0 {
@@ -184,6 +188,11 @@ func (p *PanyqPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 	}
 	
 	return results, err
+}
+
+// SearchWithResult 执行搜索并返回包含IsFinal标记的结果
+func (p *PanyqPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
+	return p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
 }
 
 // doSearch 实际的搜索实现

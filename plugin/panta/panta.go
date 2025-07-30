@@ -3,7 +3,6 @@ package panta
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"pansou/model"
@@ -148,10 +147,9 @@ const (
 	maxBackoff = 5000
 )
 
-// PantaPlugin 是PanTa网站的搜索插件实现
-type PantaPlugin struct {
-	// HTTP客户端，用于发送请求
-	client *http.Client
+// PantaAsyncPlugin 是PanTa网站的异步搜索插件实现
+type PantaAsyncPlugin struct {
+	*plugin.BaseAsyncPlugin
 	
 	// 并发控制
 	maxConcurrency int
@@ -163,63 +161,30 @@ type PantaPlugin struct {
 	lastAdjustTime     time.Time
 }
 
-// 确保PantaPlugin实现了SearchPlugin接口
-var _ plugin.SearchPlugin = (*PantaPlugin)(nil)
+// 确保PantaAsyncPlugin实现了AsyncSearchPlugin接口
+var _ plugin.AsyncSearchPlugin = (*PantaAsyncPlugin)(nil)
 
 // 在包初始化时注册插件
 func init() {
 	// 创建并注册插件实例
-	plugin.RegisterGlobalPlugin(NewPantaPlugin())
+	plugin.RegisterGlobalPlugin(NewPantaAsyncPlugin())
 }
 
-// NewPantaPlugin 创建一个新的PanTa插件实例
-func NewPantaPlugin() *PantaPlugin {
-	// 创建一个带有更多配置的HTTP传输层
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 60 * time.Second, // 增加保持活动时间
-			DualStack: true,             // 启用IPv4/IPv6双栈
-		}).DialContext,
-		MaxIdleConns:          200,  // 增加最大空闲连接数
-		IdleConnTimeout:       120 * time.Second, // 增加空闲连接超时
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		MaxIdleConnsPerHost:   50,   // 增加每个主机的最大空闲连接数
-		MaxConnsPerHost:       100,  // 限制每个主机的最大连接数
-		DisableKeepAlives:     false, // 确保启用长连接
-		ForceAttemptHTTP2:     true,  // 尝试使用HTTP/2
-		WriteBufferSize:       16 * 1024, // 增加写缓冲区大小
-		ReadBufferSize:        16 * 1024, // 增加读缓冲区大小
-	}
-	
-	// 创建HTTP客户端
-	client := &http.Client{
-		Timeout:   time.Duration(defaultTimeout) * time.Second,
-		Transport: transport,
-		// 禁用重定向，因为我们只关心初始响应
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	
+// NewPantaAsyncPlugin 创建一个新的PanTa异步插件实例
+func NewPantaAsyncPlugin() *PantaAsyncPlugin {
 	// 启动定期清理缓存的goroutine
 	go startCacheCleaner()
 	
 	// 创建插件实例
-	plugin := &PantaPlugin{
-		client:             client,
+	p := &PantaAsyncPlugin{
+		BaseAsyncPlugin:    plugin.NewBaseAsyncPlugin("panta", 2),
 		maxConcurrency:     defaultConcurrency,
 		currentConcurrency: defaultConcurrency,
-		responseTimes:      make([]time.Duration, 0, 100),
+		responseTimes:      make([]time.Duration, 0, 10),
 		lastAdjustTime:     time.Now(),
 	}
 	
-	// 启动自适应并发控制
-	go plugin.startConcurrencyAdjuster()
-	
-	return plugin
+	return p
 }
 
 // startCacheCleaner 启动一个定期清理缓存的goroutine
@@ -242,17 +207,31 @@ func startCacheCleaner() {
 }
 
 // Name 返回插件名称
-func (p *PantaPlugin) Name() string {
+func (p *PantaAsyncPlugin) Name() string {
 	return pluginName
 }
 
 // Priority 返回插件优先级
-func (p *PantaPlugin) Priority() int {
+func (p *PantaAsyncPlugin) Priority() int {
 	return defaultPriority
 }
 
-// Search 执行搜索并返回结果
-func (p *PantaPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+// Search 执行搜索并返回结果（兼容性方法）
+func (p *PantaAsyncPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	result, err := p.SearchWithResult(keyword, ext)
+	if err != nil {
+		return nil, err
+	}
+	return result.Results, nil
+}
+
+// SearchWithResult 执行搜索并返回包含IsFinal标记的结果
+func (p *PantaAsyncPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
+	return p.AsyncSearchWithResult(keyword, p.doSearch, p.MainCacheKey, ext)
+}
+
+// doSearch 执行具体的搜索逻辑
+func (p *PantaAsyncPlugin) doSearch(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
 	// 对关键词进行URL编码
 	encodedKeyword := url.QueryEscape(keyword)
 	
@@ -279,7 +258,7 @@ func (p *PantaPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 	req.Header.Set("Cache-Control", "max-age=0")
 	
 	// 使用带重试的请求方法发送HTTP请求
-	resp, err := p.doRequestWithRetry(req)
+	resp, err := p.doRequestWithRetry(req, client)
 	if err != nil {
 		return nil, fmt.Errorf("请求PanTa搜索页面失败: %v", err)
 	}
@@ -297,7 +276,7 @@ func (p *PantaPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 	}
 	
 	// 解析搜索结果
-	results, err := p.parseSearchResults(doc)
+	results, err := p.parseSearchResults(doc, client)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +288,7 @@ func (p *PantaPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 }
 
 // parseSearchResults 使用goquery解析搜索结果
-func (p *PantaPlugin) parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
+func (p *PantaAsyncPlugin) parseSearchResults(doc *goquery.Document, client *http.Client) ([]model.SearchResult, error) {
 	var results []model.SearchResult
 	
 	// 创建信号量控制并发数，使用自适应并发数
@@ -428,7 +407,7 @@ func (p *PantaPlugin) parseSearchResults(doc *goquery.Document) ([]model.SearchR
 						time.Sleep(backoffTime)
 					}
 					
-					threadLinks, err := p.fetchThreadLinks(topicID)
+					threadLinks, err := p.fetchThreadLinks(topicID, client)
 					if err == nil && len(threadLinks) > 0 {
 						foundLinks = threadLinks
 						break
@@ -494,7 +473,7 @@ func (p *PantaPlugin) parseSearchResults(doc *goquery.Document) ([]model.SearchR
 }
 
 // extractLinksFromElement 从元素中提取链接
-func (p *PantaPlugin) extractLinksFromElement(s *goquery.Selection, yearFromTitle string) []model.Link {
+func (p *PantaAsyncPlugin) extractLinksFromElement(s *goquery.Selection, yearFromTitle string) []model.Link {
 	// 创建缓存键
 	html, _ := s.Html()
 	cacheKey := fmt.Sprintf("%s_%s", html, yearFromTitle)
@@ -611,7 +590,7 @@ func (p *PantaPlugin) extractLinksFromElement(s *goquery.Selection, yearFromTitl
 }
 
 // fetchThreadLinks 获取帖子详情页中的链接
-func (p *PantaPlugin) fetchThreadLinks(topicID string) ([]model.Link, error) {
+func (p *PantaAsyncPlugin) fetchThreadLinks(topicID string, client *http.Client) ([]model.Link, error) {
 	// 检查缓存中是否已有结果
 	if cachedLinks, ok := threadLinksCache.Load(topicID); ok {
 		return cachedLinks.([]model.Link), nil
@@ -640,7 +619,7 @@ func (p *PantaPlugin) fetchThreadLinks(topicID string) ([]model.Link, error) {
 	req.Header.Set("Cache-Control", "max-age=0")
 	
 	// 使用带重试的请求方法发送HTTP请求
-	resp, err := p.doRequestWithRetry(req)
+	resp, err := p.doRequestWithRetry(req, client)
 	if err != nil {
 		return nil, err
 	}
@@ -1218,7 +1197,7 @@ func isNetDiskLink(url string) bool {
 } 
 
 // startConcurrencyAdjuster 启动一个定期调整并发数的goroutine
-func (p *PantaPlugin) startConcurrencyAdjuster() {
+func (p *PantaAsyncPlugin) startConcurrencyAdjuster() {
 	ticker := time.NewTicker(concurrencyAdjustInterval * time.Second)
 	defer ticker.Stop()
 	
@@ -1228,7 +1207,7 @@ func (p *PantaPlugin) startConcurrencyAdjuster() {
 }
 
 // adjustConcurrency 根据响应时间调整并发数
-func (p *PantaPlugin) adjustConcurrency() {
+func (p *PantaAsyncPlugin) adjustConcurrency() {
 	p.responseTimesMutex.Lock()
 	defer p.responseTimesMutex.Unlock()
 	
@@ -1258,7 +1237,7 @@ func (p *PantaPlugin) adjustConcurrency() {
 }
 
 // recordResponseTime 记录请求响应时间
-func (p *PantaPlugin) recordResponseTime(d time.Duration) {
+func (p *PantaAsyncPlugin) recordResponseTime(d time.Duration) {
 	p.responseTimesMutex.Lock()
 	defer p.responseTimesMutex.Unlock()
 	
@@ -1272,7 +1251,7 @@ func (p *PantaPlugin) recordResponseTime(d time.Duration) {
 }
 
 // doRequestWithRetry 发送HTTP请求，带重试机制
-func (p *PantaPlugin) doRequestWithRetry(req *http.Request) (*http.Response, error) {
+func (p *PantaAsyncPlugin) doRequestWithRetry(req *http.Request, client *http.Client) (*http.Response, error) {
 	var resp *http.Response
 	var err error
 	var startTime time.Time
@@ -1294,7 +1273,7 @@ func (p *PantaPlugin) doRequestWithRetry(req *http.Request) (*http.Response, err
 		startTime = time.Now()
 		
 		// 发送请求
-		resp, err = p.client.Do(req)
+		resp, err = client.Do(req)
 		
 		// 记录响应时间
 		responseTime := time.Since(startTime)

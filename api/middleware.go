@@ -2,6 +2,8 @@ package api
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +46,19 @@ func LoggerMiddleware() gin.HandlerFunc {
 		// 请求路由
 		reqURI := c.Request.RequestURI
 		
+		// 对于搜索API，尝试解码关键词以便更好地显示
+		displayURI := reqURI
+		if strings.Contains(reqURI, "/api/search") && strings.Contains(reqURI, "kw=") {
+			if parsedURL, err := url.Parse(reqURI); err == nil {
+				if keyword := parsedURL.Query().Get("kw"); keyword != "" {
+					if decodedKeyword, err := url.QueryUnescape(keyword); err == nil {
+						// 替换原始URI中的编码关键词为解码后的关键词
+						displayURI = strings.Replace(reqURI, "kw="+keyword, "kw="+decodedKeyword, 1)
+					}
+				}
+			}
+		}
+		
 		// 状态码
 		statusCode := c.Writer.Status()
 		
@@ -53,6 +68,6 @@ func LoggerMiddleware() gin.HandlerFunc {
 		// 日志格式
 		gin.DefaultWriter.Write([]byte(
 			fmt.Sprintf("| %s | %s | %s | %d | %s\n", 
-				clientIP, reqMethod, reqURI, statusCode, latencyTime.String())))
+				clientIP, reqMethod, displayURI, statusCode, latencyTime.String())))
 	}
 } 

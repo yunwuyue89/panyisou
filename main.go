@@ -122,8 +122,7 @@ func startServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	
-	// 保存异步插件缓存
-	plugin.SaveCacheToDisk()
+	// 异步插件本地缓存系统已移除
 	
 	// 优雅关闭服务器
 	if err := srv.Shutdown(ctx); err != nil {
