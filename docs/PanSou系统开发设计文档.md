@@ -228,16 +228,16 @@ type BaseAsyncPlugin struct {
 ### 3.4 已实现插件列表
 
 当前系统包含以下插件（基于`main.go`的导入）：
-- **hdr4k**: HDR 4K资源搜索
-- **hunhepan**: 混合盘搜索
-- **jikepan**: 即刻盘搜索
-- **pan666**: 666盘搜索
-- **pansearch**: 盘搜索
-- **panta**: 盘塔搜索
-- **qupansou**: 去盘搜
-- **susu**: SUSU搜索
-- **panyq**: 盘有圈搜索
-- **xuexizhinan**: 学习指南搜索
+- **hdr4k**
+- **hunhepan**
+- **jikepan**
+- **pan666**
+- **pansearch**
+- **panta**
+- **qupansou**
+- **susu**
+- **panyq**
+- **xuexizhinan**
 
 ### 3.5 插件注册机制
 
@@ -516,14 +516,7 @@ export ASYNC_MAX_BACKGROUND_TASKS=200
 export CONCURRENCY=50
 ```
 
-### 8.2 性能测试脚本
-
-项目包含完整的测试套件：
-- **stress_test.py**: 高并发压力测试（100-500用户）
-- **test_performance.py**: 基础性能测试
-- **test_optimized.py**: 渐进式并发测试
-
-### 8.3 日志控制系统
+### 8.2 日志控制系统
 
 基于`config.go`的日志控制：
 ```bash
@@ -559,26 +552,3 @@ export ASYNC_LOG_ENABLED=false  # 控制异步插件详细日志
 - **降低复杂度**: 减少组件依赖
 - **提升性能**: 避免数据库IO瓶颈
 - **易于扩展**: 无状态设计，支持水平扩展
-
----
-
-## 📚 参考资料
-
-### 相关文档
-- **[插件开发指南](插件开发指南.md)** - 详细的插件开发文档
-- **[README.md](../README.md)** - 项目使用说明和性能测试结果
-
-### 性能测试
-- **stress_test.py**: 高并发压力测试脚本
-- **run_macos_optimized.sh**: macOS优化配置脚本
-- **run_optimized.sh**: 服务器优化配置脚本
-
----
-
-**文档版本**: v1.0  
-**最后更新**: 2025-01-30  
-**维护者**: PanSou开发团队
-
----
-
-*本文档基于PanSou系统的实际实现编写，包含了系统设计的核心信息。文档内容与代码实现保持同步，专注于已实现的功能特性。*
