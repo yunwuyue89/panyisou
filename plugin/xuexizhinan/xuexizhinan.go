@@ -68,7 +68,7 @@ type XuexizhinanPlugin struct {
 // NewXuexizhinanPlugin 创建新的4K指南搜索异步插件
 func NewXuexizhinanPlugin() *XuexizhinanPlugin {
 	return &XuexizhinanPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("xuexizhinan", 2), // 中等优先级
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("xuexizhinan", 1), // 中等优先级
 	}
 }
 

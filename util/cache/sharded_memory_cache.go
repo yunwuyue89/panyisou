@@ -8,6 +8,19 @@ import (
 	"time"
 )
 
+// 🔥 全局清理任务相关变量（单例模式）
+var (
+	globalCleanupTicker *time.Ticker
+	globalCleanupOnce   sync.Once
+	registeredCaches    []cleanupTarget
+	cacheRegistryMutex  sync.RWMutex
+)
+
+// 🔥 清理目标接口
+type cleanupTarget interface {
+	CleanExpired()
+}
+
 // 分片内存缓存项
 type shardedMemoryCacheItem struct {
 	data         []byte
@@ -289,14 +302,37 @@ func (c *ShardedMemoryCache) Clear() {
 	wg.Wait()
 }
 
-// 启动定期清理
+// 🔥 启动全局清理任务（单例模式）
+func startGlobalCleanupTask() {
+	globalCleanupOnce.Do(func() {
+		globalCleanupTicker = time.NewTicker(5 * time.Minute)
+		go func() {
+			for range globalCleanupTicker.C {
+				cacheRegistryMutex.RLock()
+				caches := make([]cleanupTarget, len(registeredCaches))
+				copy(caches, registeredCaches)
+				cacheRegistryMutex.RUnlock()
+				
+				// 并行清理所有注册的缓存
+				for _, cache := range caches {
+					go cache.CleanExpired()
+				}
+			}
+		}()
+	})
+}
+
+// 🔥 注册缓存到全局清理任务
+func registerForCleanup(cache cleanupTarget) {
+	cacheRegistryMutex.Lock()
+	defer cacheRegistryMutex.Unlock()
+	registeredCaches = append(registeredCaches, cache)
+}
+
+// 启动定期清理（修改为使用单例模式）
 func (c *ShardedMemoryCache) StartCleanupTask() {
-	ticker := time.NewTicker(5 * time.Minute)
-	go func() {
-		for range ticker.C {
-			c.CleanExpired()
-		}
-	}()
+	registerForCleanup(c)
+	startGlobalCleanupTask()
 }
 
 // SetDiskCacheReference 设置磁盘缓存引用

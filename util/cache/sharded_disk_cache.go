@@ -148,14 +148,16 @@ func (c *ShardedDiskCache) cleanExpired() {
 	}
 }
 
-// StartCleanupTask 启动定期清理任务
+// CleanExpired 公开的清理方法，符合cleanupTarget接口
+func (c *ShardedDiskCache) CleanExpired() {
+	c.cleanExpired()
+}
+
+// StartCleanupTask 启动定期清理任务（修改为使用单例模式）
 func (c *ShardedDiskCache) StartCleanupTask() {
-	ticker := time.NewTicker(10 * time.Minute)
-	go func() {
-		for range ticker.C {
-			c.cleanExpired()
-		}
-	}()
+	// 使用与内存缓存相同的全局清理系统
+	registerForCleanup(c)
+	startGlobalCleanupTask()
 }
 
 // GetShards 获取所有分片（用于测试和调试）

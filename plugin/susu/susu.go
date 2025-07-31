@@ -99,7 +99,7 @@ type SusuAsyncPlugin struct {
 // NewSusuAsyncPlugin 创建新的SuSu搜索异步插件
 func NewSusuAsyncPlugin() *SusuAsyncPlugin {
 	return &SusuAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("susu", 4), // 高优先级
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("susu", 1), // 高优先级
 	}
 }
 

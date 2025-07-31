@@ -39,6 +39,10 @@ var (
 	
 	// 缓存访问频率记录
 	cacheAccessCount = sync.Map{}
+	
+	// 🔥 新增：缓存清理相关变量
+	lastCleanupTime = time.Now()
+	cleanupMutex    sync.Mutex
 )
 
 // 缓存响应结构（仅内存，不持久化到磁盘）
@@ -48,6 +52,50 @@ type cachedResponse struct {
 	Complete  bool                `json:"complete"`
 	LastAccess time.Time          `json:"last_access"`
 	AccessCount int               `json:"access_count"`
+}
+
+// 🔥 新增：清理过期API缓存的函数
+func cleanupExpiredApiCache() {
+	cleanupMutex.Lock()
+	defer cleanupMutex.Unlock()
+	
+	now := time.Now()
+	// 只有距离上次清理超过30分钟才执行
+	if now.Sub(lastCleanupTime) < 30*time.Minute {
+		return
+	}
+	
+	cleanedCount := 0
+	totalCount := 0
+	deletedKeys := make([]string, 0)
+	
+	// 清理已过期的缓存（基于实际TTL + 合理的宽限期）
+	apiResponseCache.Range(func(key, value interface{}) bool {
+		totalCount++
+		if cached, ok := value.(cachedResponse); ok {
+			// 使用默认TTL + 30分钟宽限期，避免过于激进的清理
+			expireThreshold := defaultCacheTTL + 30*time.Minute
+			if now.Sub(cached.Timestamp) > expireThreshold {
+				keyStr := key.(string)
+				apiResponseCache.Delete(key)
+				deletedKeys = append(deletedKeys, keyStr)
+				cleanedCount++
+			}
+		}
+		return true
+	})
+	
+	// 清理访问计数缓存中对应的项
+	for _, key := range deletedKeys {
+		cacheAccessCount.Delete(key)
+	}
+	
+	lastCleanupTime = now
+	
+	// 记录清理日志（仅在有清理时输出）
+	if cleanedCount > 0 {
+		fmt.Printf("[Cache] 清理过期缓存: 删除 %d/%d 项，释放内存\n", cleanedCount, totalCount)
+	}
 }
 
 // initAsyncPlugin 初始化异步插件配置
@@ -143,6 +191,9 @@ func recordCacheAccess(key string) {
 	} else {
 		cacheAccessCount.Store(key, 1)
 	}
+	
+	// 🔥 新增：触发定期清理（异步执行，不阻塞当前操作）
+	go cleanupExpiredApiCache()
 }
 
 // BaseAsyncPlugin 基础异步插件结构（保留内存缓存，移除磁盘持久化）
