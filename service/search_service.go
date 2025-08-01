@@ -206,7 +206,12 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 	}
 	
 	// 创建缓存更新函数（支持IsFinal参数）- 接收原始数据并与现有缓存合并
-	cacheUpdater := func(key string, newResults []model.SearchResult, ttl time.Duration, isFinal bool, keyword string) error {
+	cacheUpdater := func(key string, newResults []model.SearchResult, ttl time.Duration, isFinal bool, keyword string, pluginName string) error {
+		// 🚀 优化：如果新结果为空，跳过缓存更新（避免无效操作）
+		if len(newResults) == 0 {
+			return nil
+		}
+		
 		// 🔧 获取现有缓存数据进行合并
 		var finalResults []model.SearchResult
 		if existingData, hit, err := mainCache.Get(key); err == nil && hit {
@@ -215,38 +220,34 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 				// 合并新旧结果，去重保留最完整的数据
 				finalResults = mergeSearchResults(existingResults, newResults)
 				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-					displayKey := key[:8] + "..."
 					if keyword != "" {
-						fmt.Printf("🔄 [异步插件] 缓存合并: %s(关键词:%s) | 原有: %d + 新增: %d = 合并后: %d\n", 
-							displayKey, keyword, len(existingResults), len(newResults), len(finalResults))
-					} else {
-						fmt.Printf("🔄 [异步插件] 缓存合并: %s | 原有: %d + 新增: %d = 合并后: %d\n", 
-							key, len(existingResults), len(newResults), len(finalResults))
+						fmt.Printf("🔄 [%s:%s] 更新缓存| 原有: %d + 新增: %d = 合并后: %d\n", 
+						pluginName, keyword, len(existingResults), len(newResults), len(finalResults))
 					}
 				}
 			} else {
 				// 反序列化失败，使用新结果
 				finalResults = newResults
-				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-					displayKey := key[:8] + "..."
-					if keyword != "" {
-						fmt.Printf("⚠️ [异步插件] 缓存反序列化失败，使用新结果: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(newResults))
-					} else {
-						fmt.Printf("⚠️ [异步插件] 缓存反序列化失败，使用新结果: %s | 结果数: %d\n", key, len(newResults))
-					}
+							if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+				displayKey := key[:8] + "..."
+				if keyword != "" {
+					fmt.Printf("⚠️ [异步插件 %s] 缓存反序列化失败，使用新结果: %s(关键词:%s) | 结果数: %d\n", pluginName, displayKey, keyword, len(newResults))
+				} else {
+					fmt.Printf("⚠️ [异步插件 %s] 缓存反序列化失败，使用新结果: %s | 结果数: %d\n", pluginName, key, len(newResults))
 				}
+			}
 			}
 		} else {
 			// 无现有缓存，直接使用新结果
 			finalResults = newResults
-			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-				displayKey := key[:8] + "..."
-				if keyword != "" {
-					fmt.Printf("📝 [异步插件] 初始缓存创建: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(newResults))
-				} else {
-					fmt.Printf("📝 [异步插件] 初始缓存创建: %s | 结果数: %d\n", key, len(newResults))
-				}
+					if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+			displayKey := key[:8] + "..."
+			if keyword != "" {
+				fmt.Printf("📝 [异步插件 %s] 初始缓存创建: %s(关键词:%s) | 结果数: %d\n", pluginName, displayKey, keyword, len(newResults))
+			} else {
+				fmt.Printf("📝 [异步插件 %s] 初始缓存创建: %s | 结果数: %d\n", pluginName, key, len(newResults))
 			}
+		}
 		}
 		
 		// 🔧 序列化合并后的结果
@@ -259,29 +260,29 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 		// 🔥 根据IsFinal参数选择缓存更新策略
 		if isFinal {
 			// 最终结果：更新内存+磁盘缓存
-			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-				displayKey := key[:8] + "..."
-				if keyword != "" {
-					fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
-						displayKey, keyword, len(finalResults), len(data))
-				} else {
-					fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
-						key, len(finalResults), len(data))
-				}
-			}
+			// if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+			// 	displayKey := key[:8] + "..."
+			// 	if keyword != "" {
+			// 		fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
+			// 			displayKey, keyword, len(finalResults), len(data))
+			// 	} else {
+			// 		fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
+			// 			key, len(finalResults), len(data))
+			// 	}
+			// }
 			return mainCache.SetBothLevels(key, data, ttl)
 		} else {
 			// 部分结果：仅更新内存缓存
-			if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-				displayKey := key[:8] + "..."
-				if keyword != "" {
-					fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
-						displayKey, keyword, len(finalResults), len(data))
-				} else {
-					fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
-						key, len(finalResults), len(data))
-				}
-			}
+			// if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+			// 	displayKey := key[:8] + "..."
+			// 	if keyword != "" {
+			// 		fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
+			// 			displayKey, keyword, len(finalResults), len(data))
+			// 	} else {
+			// 		fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
+			// 			key, len(finalResults), len(data))
+			// 	}
+			// }
 			return mainCache.SetMemoryOnly(key, data, ttl)
 		}
 	}
@@ -293,8 +294,13 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 	for _, p := range plugins {
 		// 检查插件是否实现了SetMainCacheUpdater方法（修复后的签名，增加关键词参数）
 		if asyncPlugin, ok := p.(interface{ SetMainCacheUpdater(func(string, []model.SearchResult, time.Duration, bool, string) error) }); ok {
+			// 为每个插件创建专门的缓存更新函数，绑定插件名称
+			pluginName := p.Name()
+			pluginCacheUpdater := func(key string, newResults []model.SearchResult, ttl time.Duration, isFinal bool, keyword string) error {
+				return cacheUpdater(key, newResults, ttl, isFinal, keyword, pluginName)
+			}
 			// 注入缓存更新函数
-			asyncPlugin.SetMainCacheUpdater(cacheUpdater)
+			asyncPlugin.SetMainCacheUpdater(pluginCacheUpdater)
 		}
 	}
 }
@@ -423,11 +429,14 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 	// 按照优化后的规则排序结果
 	sortResultsByTimeAndKeywords(allResults)
 
-	// 过滤结果，只保留有时间的结果或包含优先关键词的结果到Results中
+	// 过滤结果，只保留有时间的结果或包含优先关键词的结果或高等级插件结果到Results中
 	filteredForResults := make([]model.SearchResult, 0, len(allResults))
 	for _, result := range allResults {
-		// 有时间的结果或包含优先关键词的结果保留在Results中
-		if !result.Datetime.IsZero() || getKeywordPriority(result.Title) > 0 {
+		source := getResultSource(result)
+		pluginLevel := getPluginLevelBySource(source)
+		
+		// 有时间的结果或包含优先关键词的结果或高等级插件(1-2级)结果保留在Results中
+		if !result.Datetime.IsZero() || getKeywordPriority(result.Title) > 0 || pluginLevel <= 2 {
 			filteredForResults = append(filteredForResults, result)
 		}
 	}
@@ -489,79 +498,48 @@ func filterResponseByType(response model.SearchResponse, resultType string) mode
 
 // 根据时间和关键词排序结果
 func sortResultsByTimeAndKeywords(results []model.SearchResult) {
-	sort.Slice(results, func(i, j int) bool {
-		// 检查是否有零值时间
-		iZeroTime := results[i].Datetime.IsZero()
-		jZeroTime := results[j].Datetime.IsZero()
-
-		// 如果两者都是零值时间，按关键词优先级排序
-		if iZeroTime && jZeroTime {
-			iPriority := getKeywordPriority(results[i].Title)
-			jPriority := getKeywordPriority(results[j].Title)
-			if iPriority != jPriority {
-				return iPriority > jPriority
-			}
-			// 如果优先级也相同，按标题字母顺序排序
-			return results[i].Title < results[j].Title
+	// 1. 计算每个结果的综合得分
+	scores := make([]ResultScore, len(results))
+	
+	for i, result := range results {
+		source := getResultSource(result)
+		
+		scores[i] = ResultScore{
+			Result:       result,
+			TimeScore:    calculateTimeScore(result.Datetime),
+			KeywordScore: getKeywordPriority(result.Title),
+			PluginScore:  getPluginLevelScore(source),
+			TotalScore:   0, // 稍后计算
 		}
-
-		// 如果只有一个是零值时间，将其排在后面
-		if iZeroTime {
-			return false // i排在后面
-		}
-		if jZeroTime {
-			return true // j排在后面，i排在前面
-		}
-
-		// 两者都有正常时间，使用原有逻辑
-		// 计算两个结果的时间差（以天为单位）
-		timeDiff := daysBetween(results[i].Datetime, results[j].Datetime)
-
-		// 如果时间差超过30天，按时间排序（新的在前面）
-		if abs(timeDiff) > 30 {
-			return results[i].Datetime.After(results[j].Datetime)
-		}
-
-		// 如果时间差在30天内，先检查时间差是否超过1天
-		if abs(timeDiff) > 1 {
-			return results[i].Datetime.After(results[j].Datetime)
-		}
-
-		// 如果时间差在1天内，检查关键词优先级
-		iPriority := getKeywordPriority(results[i].Title)
-		jPriority := getKeywordPriority(results[j].Title)
-
-		// 如果优先级不同，优先级高的排在前面
-		if iPriority != jPriority {
-			return iPriority > jPriority
-		}
-
-		// 如果优先级相同且时间差在1天内，仍然按时间排序（新的在前面）
-		return results[i].Datetime.After(results[j].Datetime)
-	})
-}
-
-// 计算两个时间之间的天数差
-func daysBetween(t1, t2 time.Time) float64 {
-	duration := t1.Sub(t2)
-	return duration.Hours() / 24
-}
-
-// 绝对值
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
+		
+		// 计算综合得分
+		scores[i].TotalScore = scores[i].TimeScore + 
+							  float64(scores[i].KeywordScore) + 
+							  float64(scores[i].PluginScore)
 	}
-	return x
+	
+	// 2. 按综合得分排序
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].TotalScore > scores[j].TotalScore
+	})
+	
+	// 3. 更新原数组
+	for i, score := range scores {
+		results[i] = score.Result
+	}
 }
+
+
+
+
 
 // 获取标题中包含优先关键词的优先级
 func getKeywordPriority(title string) int {
 	title = strings.ToLower(title)
 	for i, keyword := range priorityKeywords {
 		if strings.Contains(title, keyword) {
-			// 返回优先级（数组索引越小，优先级越高）
-			return len(priorityKeywords) - i
+			// 返回优先级得分（数组索引越小，优先级越高，最高400分）
+			return (len(priorityKeywords) - i) * 70
 		}
 	}
 	return 0
@@ -981,23 +959,35 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 		}
 	}
 
-	// 将去重后的链接按类型分组
-	for url, mergedLink := range uniqueLinks {
-		// 获取链接类型
-		linkType := ""
-		for _, result := range results {
-			for _, link := range result.Links {
-				if link.URL == url {
-					linkType = link.Type
-					break
+	// 为保持排序顺序，按原始results顺序处理链接，而不是随机遍历map
+	// 创建一个有序的链接列表，按原始results中的顺序
+	orderedLinks := make([]model.MergedLink, 0, len(uniqueLinks))
+	linkTypeMap := make(map[string]string) // URL -> Type的映射
+	
+	// 按原始results的顺序收集唯一链接
+	for _, result := range results {
+		for _, link := range result.Links {
+			if mergedLink, exists := uniqueLinks[link.URL]; exists {
+				// 检查是否已经添加过这个链接
+				found := false
+				for _, existing := range orderedLinks {
+					if existing.URL == link.URL {
+						found = true
+						break
+					}
+				}
+				if !found {
+					orderedLinks = append(orderedLinks, mergedLink)
+					linkTypeMap[link.URL] = link.Type
 				}
 			}
-			if linkType != "" {
-				break
-			}
 		}
-
-		// 如果没有找到类型，使用"unknown"
+	}
+	
+	// 将有序链接按类型分组
+	for _, mergedLink := range orderedLinks {
+		// 从预建的映射中获取链接类型
+		linkType := linkTypeMap[mergedLink.URL]
 		if linkType == "" {
 			linkType = "unknown"
 		}
@@ -1006,6 +996,9 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 		mergedLinks[linkType] = append(mergedLinks[linkType], mergedLink)
 	}
 
+	// 注意：不再重新排序，保持SearchResult阶段的权重排序结果
+	// 原来的时间排序会覆盖权重排序，现在注释掉
+	/*
 	// 对每种类型的链接按时间排序（新的在前面）
 	for linkType, links := range mergedLinks {
 		sort.Slice(links, func(i, j int) bool {
@@ -1013,6 +1006,7 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 		})
 		mergedLinks[linkType] = links
 	}
+	*/
 
 	// 如果指定了cloudTypes，则过滤结果
 	if len(cloudTypes) > 0 {
@@ -1136,8 +1130,8 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			
 			// 🔍 添加缓存状态调试日志
 			displayKey := cacheKey[:8] + "..."
-			fmt.Printf("🔍 [主服务] 缓存检查: %s(关键词:%s) | 命中: %v | 错误: %v | 数据长度: %d\n", 
-				displayKey, keyword, hit, err, len(data))
+			fmt.Printf("🔍 [主服务] 缓存检查: %s(关键词:%s) | 命中: %v | 错误: %v \n", 
+				displayKey, keyword, hit, err)
 			
 			if err == nil && hit {
 				var results []model.SearchResult
@@ -1255,8 +1249,8 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 				// 主程序最后更新，覆盖可能有问题的异步插件缓存
 				enhancedTwoLevelCache.Set(key, data, ttl)
 				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d | 数据长度: %d\n", 
-						key, len(res), len(data))
+					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d", 
+						key, len(res))
 				}
 			}
 		}(allResults, keyword, cacheKey)
@@ -1271,3 +1265,124 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 func (s *SearchService) GetPluginManager() *plugin.PluginManager {
 	return s.pluginManager
 }
+
+// =============================================================================
+// 轻量级插件优先级排序实现
+// =============================================================================
+
+// ResultScore 搜索结果评分结构
+type ResultScore struct {
+	Result       model.SearchResult
+	TimeScore    float64  // 时间得分
+	KeywordScore int      // 关键词得分  
+	PluginScore  int      // 插件等级得分
+	TotalScore   float64  // 综合得分
+}
+
+// 插件等级缓存
+var (
+	pluginLevelCache = sync.Map{} // 插件等级缓存
+)
+
+// getResultSource 从SearchResult推断数据来源
+func getResultSource(result model.SearchResult) string {
+	if result.Channel != "" {
+		// 来自TG频道
+		return "tg:" + result.Channel
+	} else if result.UniqueID != "" && strings.Contains(result.UniqueID, "-") {
+		// 来自插件：UniqueID格式通常为 "插件名-ID"
+		parts := strings.SplitN(result.UniqueID, "-", 2)
+		if len(parts) >= 1 {
+			return "plugin:" + parts[0]
+		}
+	}
+	return "unknown"
+}
+
+// getPluginLevelBySource 根据来源获取插件等级
+func getPluginLevelBySource(source string) int {
+	// 尝试从缓存获取
+	if level, ok := pluginLevelCache.Load(source); ok {
+		return level.(int)
+	}
+	
+	parts := strings.Split(source, ":")
+	if len(parts) != 2 {
+		pluginLevelCache.Store(source, 3)
+		return 3 // 默认等级
+	}
+	
+	if parts[0] == "tg" {
+		pluginLevelCache.Store(source, 3)
+		return 3 // TG搜索等同于等级3
+	}
+	
+	if parts[0] == "plugin" {
+		level := getPluginPriorityByName(parts[1])
+		pluginLevelCache.Store(source, level)
+		return level
+	}
+	
+	pluginLevelCache.Store(source, 3)
+	return 3
+}
+
+// getPluginPriorityByName 根据插件名获取优先级
+func getPluginPriorityByName(pluginName string) int {
+	// 从已注册插件中获取优先级
+	plugins := plugin.GetRegisteredPlugins()
+	for _, p := range plugins {
+		if p.Name() == pluginName {
+			return p.Priority()
+		}
+	}
+	return 3 // 默认等级
+}
+
+// getPluginLevelScore 获取插件等级得分
+func getPluginLevelScore(source string) int {
+	level := getPluginLevelBySource(source)
+	
+	switch level {
+	case 1:
+		return 1000  // 等级1插件：1000分
+	case 2:
+		return 500   // 等级2插件：500分
+	case 3:
+		return 0     // 等级3插件：0分
+	case 4:
+		return -200  // 等级4插件：-200分
+	default:
+		return 0     // 默认使用等级3得分
+	}
+}
+
+// calculateTimeScore 计算时间得分
+func calculateTimeScore(datetime time.Time) float64 {
+	if datetime.IsZero() {
+		return 0 // 无时间信息得0分
+	}
+	
+	now := time.Now()
+	daysDiff := now.Sub(datetime).Hours() / 24
+	
+	// 时间得分：越新得分越高，最大500分（增加时间权重）
+	switch {
+	case daysDiff <= 1:
+		return 500  // 1天内
+	case daysDiff <= 3:
+		return 400  // 3天内
+	case daysDiff <= 7:
+		return 300  // 1周内
+	case daysDiff <= 30:
+		return 200  // 1月内
+	case daysDiff <= 90:
+		return 100  // 3月内
+	case daysDiff <= 365:
+		return 50   // 1年内
+	default:
+		return 20   // 1年以上
+	}
+}
+
+

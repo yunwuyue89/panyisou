@@ -117,7 +117,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewDuoduoPlugin 创建新的Duoduo异步插件
 func NewDuoduoPlugin() *DuoduoAsyncPlugin {
 	return &DuoduoAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("duoduo", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("duoduo", 2),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -295,7 +295,7 @@ func (p *DuoduoAsyncPlugin) parseSearchItem(s *goquery.Selection, keyword string
 	
 	result.Content = strings.Join(contentParts, "\n")
 	result.Channel = "" // 插件搜索结果不设置频道名，只有Telegram频道结果才设置
-	result.Datetime = time.Now() // 使用当前时间，因为页面没有明确的发布时间
+	result.Datetime = time.Time{} // 使用零值而不是nil，参考jikepan插件标准
 	
 	return result
 }

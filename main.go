@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"syscall"
 	"time"
 
@@ -247,9 +248,20 @@ func printServiceInfo(port string, pluginManager *plugin.PluginManager) {
 		fmt.Println("异步插件已禁用")
 	}
 	
-	// 输出插件信息
+	// 输出插件信息（按优先级排序）
 	fmt.Println("已加载插件:")
-	for _, p := range pluginManager.GetPlugins() {
+	plugins := pluginManager.GetPlugins()
+	
+	// 按优先级排序（优先级数字越小越靠前）
+	sort.Slice(plugins, func(i, j int) bool {
+		// 优先级相同时按名称排序
+		if plugins[i].Priority() == plugins[j].Priority() {
+			return plugins[i].Name() < plugins[j].Name()
+		}
+		return plugins[i].Priority() < plugins[j].Priority()
+	})
+	
+	for _, p := range plugins {
 		fmt.Printf("  - %s (优先级: %d)\n", p.Name(), p.Priority())
 	}
 } 

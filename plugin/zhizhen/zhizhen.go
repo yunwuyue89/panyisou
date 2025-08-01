@@ -84,7 +84,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewZhizhenPlugin 创建新的Zhizhen异步插件
 func NewZhizhenPlugin() *ZhizhenAsyncPlugin {
 	return &ZhizhenAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("zhizhen", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("zhizhen", 1),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -247,7 +247,7 @@ func (p *ZhizhenAsyncPlugin) parseAPIItem(item ZhizhenAPIItem) model.SearchResul
 		Links:    links,
 		Tags:     tags,
 		Channel:  "", // 插件搜索结果Channel为空
-		Datetime: time.Now(),
+		Datetime: time.Time{}, // 使用零值而不是nil，参考jikepan插件标准
 	}
 }
 

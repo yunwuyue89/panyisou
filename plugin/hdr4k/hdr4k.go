@@ -102,7 +102,7 @@ type Hdr4kAsyncPlugin struct {
 // NewHdr4kAsyncPlugin 创建新的4KHDR搜索异步插件
 func NewHdr4kAsyncPlugin() *Hdr4kAsyncPlugin {
 	return &Hdr4kAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("hdr4k", 3), // 高优先级
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("hdr4k", 1), // 高优先级
 	}
 }
 

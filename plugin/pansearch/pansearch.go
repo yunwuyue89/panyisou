@@ -236,7 +236,7 @@ func NewPanSearchPlugin() *PanSearchAsyncPlugin {
 	maxConcurrent := MaxConcurrent
 
 	p := &PanSearchAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pansearch", 4),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("pansearch", 3),
 		timeout:         timeout,
 		maxResults:      MaxResults,
 		maxConcurrent:   maxConcurrent,

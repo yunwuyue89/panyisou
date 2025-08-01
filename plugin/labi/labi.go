@@ -96,7 +96,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewLabiPlugin 创建新的Labi异步插件
 func NewLabiPlugin() *LabiAsyncPlugin {
 	return &LabiAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("labi", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("labi", 1),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -261,7 +261,7 @@ func (p *LabiAsyncPlugin) parseSearchItem(s *goquery.Selection, keyword string) 
 	
 	result.Content = strings.Join(contentParts, "\n")
 	result.Channel = "" // 插件搜索结果不设置频道名，只有Telegram频道结果才设置
-	result.Datetime = time.Now() // 使用当前时间，因为页面没有明确的发布时间
+	result.Datetime = time.Time{} // 使用零值而不是nil，参考jikepan插件标准
 	
 	return result
 }

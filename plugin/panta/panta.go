@@ -114,7 +114,7 @@ const (
 	threadURLTemplate = "https://www.91panta.cn/thread?topicId=%s"
 	
 	// 默认优先级
-	defaultPriority = 4
+	defaultPriority = 1
 	
 	// 默认超时时间（秒）
 	defaultTimeout = 6
@@ -177,7 +177,7 @@ func NewPantaAsyncPlugin() *PantaAsyncPlugin {
 	
 	// 创建插件实例
 	p := &PantaAsyncPlugin{
-		BaseAsyncPlugin:    plugin.NewBaseAsyncPlugin("panta", 2),
+		BaseAsyncPlugin:    plugin.NewBaseAsyncPlugin("panta", defaultPriority),
 		maxConcurrency:     defaultConcurrency,
 		currentConcurrency: defaultConcurrency,
 		responseTimes:      make([]time.Duration, 0, 10),
@@ -423,8 +423,7 @@ func (p *PantaAsyncPlugin) parseSearchResults(doc *goquery.Document, client *htt
 			// 只有包含链接的结果才添加到结果中
 			if len(links) > 0 {
 				result := model.SearchResult{
-					UniqueID: "panta_" + topicID,
-					Channel:  pluginName,
+					UniqueID: "panta-" + topicID,
 					Datetime: postTime,
 					Title:    title,
 					Content:  summary,

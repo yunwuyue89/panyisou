@@ -85,7 +85,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewHubanPlugin 创建新的Huban异步插件
 func NewHubanPlugin() *HubanAsyncPlugin {
 	return &HubanAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("huban", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("huban", 2),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -245,7 +245,7 @@ func (p *HubanAsyncPlugin) parseAPIItem(item HubanAPIItem) model.SearchResult {
 		Links:    links,
 		Tags:     tags,
 		Channel:  "", // 插件搜索结果Channel为空
-		Datetime: time.Now(),
+		Datetime: time.Time{}, // 使用零值而不是nil，参考jikepan插件标准
 	}
 }
 

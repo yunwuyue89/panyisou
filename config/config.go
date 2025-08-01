@@ -44,6 +44,7 @@ type Config struct {
 	HTTPWriteTimeout time.Duration // 写入超时
 	HTTPIdleTimeout  time.Duration // 空闲超时
 	HTTPMaxConns     int           // 最大连接数
+
 }
 
 // 全局配置实例
@@ -88,6 +89,7 @@ func Init() {
 		HTTPWriteTimeout: getHTTPWriteTimeout(),
 		HTTPIdleTimeout:  getHTTPIdleTimeout(),
 		HTTPMaxConns:     getHTTPMaxConns(),
+
 	}
 	
 	// 应用GC配置
@@ -478,4 +480,6 @@ func applyGCSettings() {
 		// 释放操作系统内存
 		debug.FreeOSMemory()
 	}
-} 
+}
+
+ 

@@ -135,7 +135,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewFox4kPlugin 创建新的极狐4K搜索异步插件
 func NewFox4kPlugin() *Fox4kPlugin {
 	return &Fox4kPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("fox4k", 2), // 较高优先级
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("fox4k", 3), 
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -430,7 +430,7 @@ func (p *Fox4kPlugin) parseSearchResultItem(s *goquery.Selection) *model.SearchR
 		UniqueID: fmt.Sprintf("%s-%s", p.Name(), id),
 		Title:    title,
 		Content:  content,
-		Datetime: time.Now(),
+		Datetime: time.Time{}, // 使用零值而不是nil，参考jikepan插件标准
 		Tags:     tags,
 		Links:    []model.Link{}, // 初始为空，后续在详情页中填充
 		Channel:  "",             // 插件搜索结果，Channel必须为空

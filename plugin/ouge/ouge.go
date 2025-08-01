@@ -84,7 +84,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewOugePlugin 创建新的Ouge异步插件
 func NewOugePlugin() *OugeAsyncPlugin {
 	return &OugeAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("ouge", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("ouge", 2),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -243,7 +243,7 @@ func (p *OugeAsyncPlugin) parseAPIItem(item OugeAPIItem) model.SearchResult {
 		Links:    links,
 		Tags:     tags,
 		Channel:  "", // 插件搜索结果Channel为空
-		Datetime: time.Now(),
+		Datetime: time.Time{}, // 使用零值而不是nil，参考jikepan插件标准
 	}
 }
 

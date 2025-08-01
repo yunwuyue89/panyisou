@@ -100,7 +100,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewMuouPlugin 创建新的Muou异步插件
 func NewMuouPlugin() *MuouAsyncPlugin {
 	return &MuouAsyncPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("muou", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("muou", 2),
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
@@ -278,7 +278,7 @@ func (p *MuouAsyncPlugin) parseSearchItem(s *goquery.Selection, keyword string) 
 	
 	result.Content = strings.Join(contentParts, "\n")
 	result.Channel = "" // 插件搜索结果不设置频道名，只有Telegram频道结果才设置
-	result.Datetime = time.Now() // 使用当前时间，因为页面没有明确的发布时间
+	result.Datetime = time.Time{} // 使用零值而不是nil，参考jikepan插件标准
 	
 	return result
 }

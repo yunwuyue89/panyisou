@@ -356,8 +356,7 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 				AccessCount: 1,
 			})
 			
-			// 🔧 工作池满时4秒内完成，这是完整结果
-			fmt.Printf("[%s] 🕐 工作池满-直接完成: %v\n", p.name, time.Since(now))
+			// 🔧 工作池满时短超时(默认4秒)内完成，这是完整结果
 			p.updateMainCacheWithFinal(mainCacheKey, results, true)
 			
 			return
@@ -467,8 +466,7 @@ func (p *BaseAsyncPlugin) AsyncSearch(
 					AccessCount: 1,
 				})
 				
-				// 🔧 4秒内正常完成，这是完整的最终结果
-				fmt.Printf("[%s] 🕐 4秒内正常完成: %v\n", p.name, time.Since(now))
+				// 🔧 短超时(默认4秒)内正常完成，这是完整的最终结果
 				p.updateMainCacheWithFinal(mainCacheKey, results, true)
 				
 				// 异步插件本地缓存系统已移除
@@ -826,26 +824,26 @@ func (p *BaseAsyncPlugin) updateMainCacheWithFinal(cacheKey string, results []mo
 		return
 	}
 	
-	// 🔥 防止重复更新导致LRU缓存淘汰的优化
-	// 如果是最终结果，检查缓存中是否已经存在相同的最终结果
-	// 使用全局缓存键追踪已更新的最终结果
-	updateKey := fmt.Sprintf("final_updated_%s_%s", p.name, cacheKey)
-	
-	if isFinal {
-		if p.hasUpdatedFinalCache(updateKey) {
-			// 已经更新过最终结果，跳过重复更新
-			return
-		}
-		// 标记已更新
-		p.markFinalCacheUpdated(updateKey)
-	} else {
-		// 🔧 修复：如果已经有最终结果，不允许部分结果覆盖
-		if p.hasUpdatedFinalCache(updateKey) {
-			return
-		}
+	// 🚀 优化：如果新结果为空，跳过缓存更新（避免无效操作）
+	if len(results) == 0 {
+		return
 	}
 	
-	// 缓存更新时机验证（优化完成，日志简化）
+	// 🔥 增强防重复更新机制 - 使用数据哈希确保真正的去重
+	// 生成结果数据的简单哈希标识
+	dataHash := fmt.Sprintf("%d_%d", len(results), results[0].UniqueID)
+	if len(results) > 1 {
+		dataHash += fmt.Sprintf("_%d", results[len(results)-1].UniqueID)
+	}
+	updateKey := fmt.Sprintf("final_%s_%s_%s_%t", p.name, cacheKey, dataHash, isFinal)
+	
+	// 检查是否已经处理过相同的数据
+	if p.hasUpdatedFinalCache(updateKey) {
+		return
+	}
+	
+	// 标记已更新
+	p.markFinalCacheUpdated(updateKey)
 	
 	// 🔧 恢复异步插件缓存更新，使用修复后的统一序列化
 	// 传递原始数据，由主程序负责GOB序列化
