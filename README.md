@@ -12,7 +12,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 - ✅ **高可用性**: 长时间运行无故障
 
 
-## 特性（[详情见PanSou系统开发设计文档](docs/PanSou%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md)）
+## 特性（[详情见系统开发设计文档](docs/PanSou%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md)）
 
 - **高性能搜索**：并发搜索多个Telegram频道，显著提升搜索速度；工作池设计，高效管理并发任务
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
@@ -337,9 +337,19 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
         "url": "https://pan.baidu.com/s/1abcdef",
         "password": "1234",
         "note": "速度与激情全集1-10",
-        "datetime": "2023-06-10T14:23:45Z"
+        "datetime": "2023-06-10T14:23:45Z",
+        "source": "tg:频道名称"
       },
       // 更多百度网盘链接...
+    ],
+    "quark": [
+      {
+        "url": "https://pan.quark.cn/s/xxxx",
+        "password": "",
+        "note": "凡人修仙传",
+        "datetime": "2023-06-10T15:30:22Z",
+        "source": "plugin:插件名"
+      }
     ],
     "aliyun": [
       // 阿里云盘链接...
@@ -348,6 +358,13 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
   }
 }
 ```
+
+**字段说明**：
+
+- `source`: 数据来源标识
+  - `tg:频道名称`: 来自Telegram频道
+  - `plugin:插件名`: 来自指定插件
+  - `unknown`: 未知来源
 
 **错误响应**：
 
@@ -372,14 +389,26 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
   "channels": [
     "tgsearchers2"
   ],
-  "plugin_count": 6,
+  "plugin_count": 16,
   "plugins": [
     "pansearch",
-    "panta",
+    "panta", 
     "qupansou",
     "hunhepan",
     "jikepan",
-    "pan666"
+    "pan666",
+    "panyq",
+    "susu",
+    "xuexizhinan",
+    "hdr4k",
+    "labi",
+    "shandian",
+    "duoduo",
+    "muou",
+    "wanou",
+    "ouge",
+    "zhizhen",
+    "huban"
   ],
   "plugins_enabled": true,
   "status": "ok"

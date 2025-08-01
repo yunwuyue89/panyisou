@@ -27,6 +27,7 @@ type MergedLink struct {
 	Password string    `json:"password" sonic:"password"`
 	Note     string    `json:"note" sonic:"note"`
 	Datetime time.Time `json:"datetime" sonic:"datetime"`
+	Source   string    `json:"source,omitempty" sonic:"source,omitempty"` // 数据来源：tg:频道名 或 plugin:插件名
 }
 
 // MergedLinks 按网盘类型分组的合并链接

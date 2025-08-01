@@ -223,7 +223,7 @@ func (p *ShandianAsyncPlugin) parseSearchItem(s *goquery.Selection, keyword stri
 	}
 	
 	result.Content = strings.Join(contentParts, "\n")
-	result.Channel = p.Name()
+	result.Channel = "" // 插件搜索结果不设置频道名，只有Telegram频道结果才设置
 	result.Datetime = time.Now() // 使用当前时间，因为页面没有明确的发布时间
 	
 	return result
@@ -357,7 +357,8 @@ func (p *ShandianAsyncPlugin) fetchDetailLinks(client *http.Client, itemID strin
 	doc.Find("#download-list .module-row-one").Each(func(i int, s *goquery.Selection) {
 		// 从data-clipboard-text属性提取链接
 		if linkURL, exists := s.Find("[data-clipboard-text]").Attr("data-clipboard-text"); exists {
-			if ucLinkRegex.MatchString(linkURL) {
+			// 过滤掉无效链接
+			if p.isValidNetworkDriveURL(linkURL) && ucLinkRegex.MatchString(linkURL) {
 				link := model.Link{
 					Type:     "uc",
 					URL:      linkURL,
@@ -370,7 +371,8 @@ func (p *ShandianAsyncPlugin) fetchDetailLinks(client *http.Client, itemID strin
 		// 也检查直接的href属性
 		s.Find("a[href]").Each(func(j int, a *goquery.Selection) {
 			if linkURL, exists := a.Attr("href"); exists {
-				if ucLinkRegex.MatchString(linkURL) {
+				// 过滤掉无效链接
+				if p.isValidNetworkDriveURL(linkURL) && ucLinkRegex.MatchString(linkURL) {
 					// 避免重复添加
 					isDuplicate := false
 					for _, existingLink := range links {
@@ -394,6 +396,20 @@ func (p *ShandianAsyncPlugin) fetchDetailLinks(client *http.Client, itemID strin
 	})
 	
 	return links
+}
+
+// isValidNetworkDriveURL 检查URL是否为有效的网盘链接
+func (p *ShandianAsyncPlugin) isValidNetworkDriveURL(url string) bool {
+	// 过滤掉明显无效的链接
+	if strings.Contains(url, "javascript:") || 
+	   strings.Contains(url, "#") ||
+	   url == "" ||
+	   !strings.HasPrefix(url, "http") {
+		return false
+	}
+	
+	// 对于shandian插件，只检查UC网盘格式
+	return ucLinkRegex.MatchString(url)
 }
 
 // min 返回两个整数中的较小值

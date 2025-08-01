@@ -943,12 +943,29 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 				continue
 			}
 			
+			// 确定数据来源
+			var source string
+			if result.Channel != "" {
+				// 来自TG频道
+				source = "tg:" + result.Channel
+			} else if result.UniqueID != "" && strings.Contains(result.UniqueID, "-") {
+				// 来自插件：UniqueID格式通常为 "插件名-ID"
+				parts := strings.SplitN(result.UniqueID, "-", 2)
+				if len(parts) >= 1 {
+					source = "plugin:" + parts[0]
+				}
+			} else {
+				// 无法确定来源，使用默认值
+				source = "unknown"
+			}
+			
 			// 创建合并后的链接
 			mergedLink := model.MergedLink{
 				URL:      link.URL,
 				Password: link.Password,
 				Note:     title, // 使用找到的特定标题
 				Datetime: result.Datetime,
+				Source:   source, // 添加数据来源字段
 			}
 
 			// 检查是否已存在相同URL的链接
@@ -1208,12 +1225,17 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 	// 执行搜索任务并获取结果
 	results := pool.ExecuteBatchWithTimeout(tasks, concurrency, config.AppConfig.PluginTimeout)
 	
-	// 合并所有插件的结果
+	// 合并所有插件的结果，过滤掉无链接的结果
 	var allResults []model.SearchResult
 	for _, result := range results {
 		if result != nil {
 			pluginResults := result.([]model.SearchResult)
-			allResults = append(allResults, pluginResults...)
+			// 只添加有链接的结果到最终结果中
+			for _, pluginResult := range pluginResults {
+				if len(pluginResult.Links) > 0 {
+					allResults = append(allResults, pluginResult)
+				}
+			}
 		}
 	}
 	

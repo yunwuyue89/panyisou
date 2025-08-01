@@ -20,12 +20,22 @@ var (
 	// 从详情页URL中提取ID的正则表达式
 	detailIDRegex = regexp.MustCompile(`/vod/detail/id/(\d+)\.html`)
 	
-	// 常见网盘链接的正则表达式
-	quarkLinkRegex = regexp.MustCompile(`https?://pan\.quark\.cn/s/[0-9a-zA-Z]+`)
-	ucLinkRegex    = regexp.MustCompile(`https?://drive\.uc\.cn/s/[0-9a-zA-Z]+(\?[^"'\s]*)?`)
-	baiduLinkRegex  = regexp.MustCompile(`https?://pan\.baidu\.com/s/[0-9a-zA-Z_\-]+(\?pwd=[0-9a-zA-Z]+)?`)
-	aliyunLinkRegex = regexp.MustCompile(`https?://(www\.)?aliyundrive\.com/s/[0-9a-zA-Z]+`)
-	xunleiLinkRegex = regexp.MustCompile(`https?://pan\.xunlei\.com/s/[0-9a-zA-Z_\-]+(\?pwd=[0-9a-zA-Z]+)?`)
+	// 常见网盘链接的正则表达式（支持16种类型）
+	quarkLinkRegex     = regexp.MustCompile(`https?://pan\.quark\.cn/s/[0-9a-zA-Z]+`)
+	ucLinkRegex        = regexp.MustCompile(`https?://drive\.uc\.cn/s/[0-9a-zA-Z]+(\?[^"'\s]*)?`)
+	baiduLinkRegex     = regexp.MustCompile(`https?://pan\.baidu\.com/s/[0-9a-zA-Z_\-]+(\?pwd=[0-9a-zA-Z]+)?`)
+	aliyunLinkRegex    = regexp.MustCompile(`https?://(www\.)?(aliyundrive\.com|alipan\.com)/s/[0-9a-zA-Z]+`)
+	xunleiLinkRegex    = regexp.MustCompile(`https?://pan\.xunlei\.com/s/[0-9a-zA-Z_\-]+(\?pwd=[0-9a-zA-Z]+)?`)
+	tianyiLinkRegex    = regexp.MustCompile(`https?://cloud\.189\.cn/t/[0-9a-zA-Z]+`)
+	link115Regex       = regexp.MustCompile(`https?://115\.com/s/[0-9a-zA-Z]+`)
+	mobileLinkRegex    = regexp.MustCompile(`https?://caiyun\.feixin\.10086\.cn/[0-9a-zA-Z]+`)
+	weiyunLinkRegex    = regexp.MustCompile(`https?://share\.weiyun\.com/[0-9a-zA-Z]+`)
+	lanzouLinkRegex    = regexp.MustCompile(`https?://(www\.)?(lanzou[uixys]*|lan[zs]o[ux])\.(com|net|org)/[0-9a-zA-Z]+`)
+	jianguoyunLinkRegex = regexp.MustCompile(`https?://(www\.)?jianguoyun\.com/p/[0-9a-zA-Z]+`)
+	link123Regex       = regexp.MustCompile(`https?://123pan\.com/s/[0-9a-zA-Z]+`)
+	pikpakLinkRegex    = regexp.MustCompile(`https?://mypikpak\.com/s/[0-9a-zA-Z]+`)
+	magnetLinkRegex    = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}`)
+	ed2kLinkRegex      = regexp.MustCompile(`ed2k://\|file\|.+\|\d+\|[0-9a-fA-F]{32}\|/`)
 	
 	// 年份提取正则表达式
 	yearRegex = regexp.MustCompile(`(\d{4})`)
@@ -227,7 +237,7 @@ func (p *DuoduoAsyncPlugin) parseSearchItem(s *goquery.Selection, keyword string
 	}
 	
 	result.Content = strings.Join(contentParts, "\n")
-	result.Channel = p.Name()
+	result.Channel = "" // 插件搜索结果不设置频道名，只有Telegram频道结果才设置
 	result.Datetime = time.Now() // 使用当前时间，因为页面没有明确的发布时间
 	
 	return result
@@ -361,36 +371,42 @@ func (p *DuoduoAsyncPlugin) fetchDetailLinks(client *http.Client, itemID string)
 	doc.Find("#download-list .module-row-one").Each(func(i int, s *goquery.Selection) {
 		// 从data-clipboard-text属性提取链接
 		if linkURL, exists := s.Find("[data-clipboard-text]").Attr("data-clipboard-text"); exists {
-			if linkType := p.determineLinkType(linkURL); linkType != "" {
-				link := model.Link{
-					Type:     linkType,
-					URL:      linkURL,
-					Password: "", // 大部分网盘不需要密码
+			// 过滤掉无效链接
+			if p.isValidNetworkDriveURL(linkURL) {
+				if linkType := p.determineLinkType(linkURL); linkType != "" {
+					link := model.Link{
+						Type:     linkType,
+						URL:      linkURL,
+						Password: "", // 大部分网盘不需要密码
+					}
+					links = append(links, link)
 				}
-				links = append(links, link)
 			}
 		}
 		
 		// 也检查直接的href属性
 		s.Find("a[href]").Each(func(j int, a *goquery.Selection) {
 			if linkURL, exists := a.Attr("href"); exists {
-				if linkType := p.determineLinkType(linkURL); linkType != "" {
-					// 避免重复添加
-					isDuplicate := false
-					for _, existingLink := range links {
-						if existingLink.URL == linkURL {
-							isDuplicate = true
-							break
+				// 过滤掉无效链接
+				if p.isValidNetworkDriveURL(linkURL) {
+					if linkType := p.determineLinkType(linkURL); linkType != "" {
+						// 避免重复添加
+						isDuplicate := false
+						for _, existingLink := range links {
+							if existingLink.URL == linkURL {
+								isDuplicate = true
+								break
+							}
 						}
-					}
-					
-					if !isDuplicate {
-						link := model.Link{
-							Type:     linkType,
-							URL:      linkURL,
-							Password: "",
+						
+						if !isDuplicate {
+							link := model.Link{
+								Type:     linkType,
+								URL:      linkURL,
+								Password: "",
+							}
+							links = append(links, link)
 						}
-						links = append(links, link)
 					}
 				}
 			}
@@ -400,7 +416,35 @@ func (p *DuoduoAsyncPlugin) fetchDetailLinks(client *http.Client, itemID string)
 	return links
 }
 
-// determineLinkType 根据URL确定链接类型
+// isValidNetworkDriveURL 检查URL是否为有效的网盘链接
+func (p *DuoduoAsyncPlugin) isValidNetworkDriveURL(url string) bool {
+	// 过滤掉明显无效的链接
+	if strings.Contains(url, "javascript:") || 
+	   strings.Contains(url, "#") ||
+	   url == "" ||
+	   (!strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "magnet:") && !strings.HasPrefix(url, "ed2k:")) {
+		return false
+	}
+	
+	// 检查是否匹配任何支持的网盘格式（16种）
+	return quarkLinkRegex.MatchString(url) ||
+		   ucLinkRegex.MatchString(url) ||
+		   baiduLinkRegex.MatchString(url) ||
+		   aliyunLinkRegex.MatchString(url) ||
+		   xunleiLinkRegex.MatchString(url) ||
+		   tianyiLinkRegex.MatchString(url) ||
+		   link115Regex.MatchString(url) ||
+		   mobileLinkRegex.MatchString(url) ||
+		   weiyunLinkRegex.MatchString(url) ||
+		   lanzouLinkRegex.MatchString(url) ||
+		   jianguoyunLinkRegex.MatchString(url) ||
+		   link123Regex.MatchString(url) ||
+		   pikpakLinkRegex.MatchString(url) ||
+		   magnetLinkRegex.MatchString(url) ||
+		   ed2kLinkRegex.MatchString(url)
+}
+
+// determineLinkType 根据URL确定链接类型（支持16种类型）
 func (p *DuoduoAsyncPlugin) determineLinkType(url string) string {
 	switch {
 	case quarkLinkRegex.MatchString(url):
@@ -413,8 +457,28 @@ func (p *DuoduoAsyncPlugin) determineLinkType(url string) string {
 		return "aliyun"
 	case xunleiLinkRegex.MatchString(url):
 		return "xunlei"
+	case tianyiLinkRegex.MatchString(url):
+		return "tianyi"
+	case link115Regex.MatchString(url):
+		return "115"
+	case mobileLinkRegex.MatchString(url):
+		return "mobile"
+	case weiyunLinkRegex.MatchString(url):
+		return "weiyun"
+	case lanzouLinkRegex.MatchString(url):
+		return "lanzou"
+	case jianguoyunLinkRegex.MatchString(url):
+		return "jianguoyun"
+	case link123Regex.MatchString(url):
+		return "123"
+	case pikpakLinkRegex.MatchString(url):
+		return "pikpak"
+	case magnetLinkRegex.MatchString(url):
+		return "magnet"
+	case ed2kLinkRegex.MatchString(url):
+		return "ed2k"
 	default:
-		return "others"
+		return "" // 不支持的类型返回空字符串
 	}
 }
 
