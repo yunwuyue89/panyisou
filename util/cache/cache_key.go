@@ -30,32 +30,6 @@ func init() {
 	// 预计算空列表的哈希值
 	precomputedHashes.Store("empty_channels", "all")
 	
-	// 预计算常用的频道组合哈希值
-	commonChannels := [][]string{
-		{"dongman", "anime"},
-		{"movie", "film"},
-		{"music", "audio"},
-		{"book", "ebook"},
-	}
-	
-	for _, channels := range commonChannels {
-		key := strings.Join(channels, ",")
-		hash := calculateListHash(channels)
-		precomputedHashes.Store("channels:"+key, hash)
-	}
-	
-	// 预计算常用的插件组合哈希值
-	commonPlugins := [][]string{
-		{"pan666", "panta"},
-		{"aliyun", "baidu"},
-	}
-	
-	for _, plugins := range commonPlugins {
-		key := strings.Join(plugins, ",")
-		hash := calculateListHash(plugins)
-		precomputedHashes.Store("plugins:"+key, hash)
-	}
-	
 	// 预计算所有插件的哈希值
 	allPlugins := plugin.GetRegisteredPlugins()
 	allPluginNames := make([]string, 0, len(allPlugins))
@@ -145,12 +119,7 @@ func getChannelsHash(channels []string) string {
 		copy(channelsCopy, channels)
 		sort.Strings(channelsCopy)
 		
-		// 检查是否有预计算的哈希
-		key := strings.Join(channelsCopy, ",")
-		if hash, ok := precomputedHashes.Load("channels:"+key); ok {
-			return hash.(string)
-		}
-		
+		// 直接返回排序后的字符串连接
 		return strings.Join(channelsCopy, ",")
 	}
 	
@@ -211,12 +180,7 @@ func getPluginsHash(plugins []string) string {
 		}
 		sort.Strings(pluginsCopy)
 		
-		// 检查是否有预计算的哈希
-		key := strings.Join(pluginsCopy, ",")
-		if hash, ok := precomputedHashes.Load("plugins:"+key); ok {
-			return hash.(string)
-		}
-		
+		// 直接返回排序后的字符串连接
 		return strings.Join(pluginsCopy, ",")
 	}
 	
@@ -319,4 +283,4 @@ func GenerateCacheKeyLegacy(query string, filters map[string]string) string {
 	// 计算MD5哈希
 	hash := md5.Sum([]byte(keyStr))
 	return hex.EncodeToString(hash[:])
-} 
+}
