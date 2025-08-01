@@ -29,7 +29,30 @@ var (
 	// 缓存相关
 	detailCache = sync.Map{} // 缓存详情页解析结果
 	lastCleanupTime = time.Now()
-	cacheTTL = 2 * time.Hour
+	cacheTTL = 1 * time.Hour // 优化为更短的缓存时间
+)
+
+const (
+	// 超时时间优化
+	DefaultTimeout = 8 * time.Second
+	DetailTimeout  = 6 * time.Second
+	// 并发数优化
+	MaxConcurrency = 20
+	// HTTP连接池配置
+	MaxIdleConns        = 200
+	MaxIdleConnsPerHost = 50
+	MaxConnsPerHost     = 100
+	IdleConnTimeout     = 90 * time.Second
+)
+
+// 性能统计
+var (
+	searchRequests     int64 = 0
+	detailPageRequests int64 = 0
+	cacheHits          int64 = 0
+	cacheMisses        int64 = 0
+	totalSearchTime    int64 = 0
+	totalDetailTime    int64 = 0
 )
 
 // 在init函数中注册插件
@@ -55,12 +78,26 @@ func startCacheCleaner() {
 // ShandianAsyncPlugin Shandian异步插件
 type ShandianAsyncPlugin struct {
 	*plugin.BaseAsyncPlugin
+	optimizedClient *http.Client
+}
+
+// createOptimizedHTTPClient 创建优化的HTTP客户端
+func createOptimizedHTTPClient() *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        MaxIdleConns,
+		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
+		MaxConnsPerHost:     MaxConnsPerHost,
+		IdleConnTimeout:     IdleConnTimeout,
+		DisableKeepAlives:   false,
+	}
+	return &http.Client{Transport: transport, Timeout: DefaultTimeout}
 }
 
 // NewShandianPlugin 创建新的Shandian异步插件
 func NewShandianPlugin() *ShandianAsyncPlugin {
 	return &ShandianAsyncPlugin{
 		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("shandian", 3),
+		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
 
@@ -84,7 +121,7 @@ func (p *ShandianAsyncPlugin) searchImpl(client *http.Client, keyword string, ex
 	searchURL := fmt.Sprintf("http://1.95.79.193/index.php/vod/search/wd/%s.html", url.QueryEscape(keyword))
 	
 	// 2. 创建带超时的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
 	
 	// 3. 创建请求
@@ -236,7 +273,7 @@ func (p *ShandianAsyncPlugin) enhanceWithDetails(client *http.Client, results []
 	var wg sync.WaitGroup
 	
 	// 限制并发数
-	semaphore := make(chan struct{}, 5)
+	semaphore := make(chan struct{}, MaxConcurrency)
 	
 	for _, result := range results {
 		wg.Add(1)
@@ -319,7 +356,7 @@ func (p *ShandianAsyncPlugin) fetchDetailLinks(client *http.Client, itemID strin
 	detailURL := fmt.Sprintf("http://1.95.79.193/index.php/vod/detail/id/%s.html", itemID)
 	
 	// 创建带超时的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DetailTimeout)
 	defer cancel()
 	
 	// 创建请求

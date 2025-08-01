@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -41,6 +42,34 @@ var (
 	detailCache = sync.Map{} // 缓存详情页解析结果
 )
 
+const (
+	// 默认超时时间 - 优化为更短时间
+	DefaultTimeout = 8 * time.Second
+	DetailTimeout  = 6 * time.Second
+
+	// 并发数限制 - 大幅提高并发数
+	MaxConcurrency = 20
+
+	// HTTP连接池配置
+	MaxIdleConns        = 200
+	MaxIdleConnsPerHost = 50
+	MaxConnsPerHost     = 100
+	IdleConnTimeout     = 90 * time.Second
+
+	// 缓存TTL - 更短的缓存时间
+	cacheTTL = 1 * time.Hour
+)
+
+// 性能统计（原子操作）
+var (
+	searchRequests     int64 = 0
+	detailPageRequests int64 = 0
+	cacheHits          int64 = 0
+	cacheMisses        int64 = 0
+	totalSearchTime    int64 = 0 // 纳秒
+	totalDetailTime    int64 = 0 // 纳秒
+)
+
 // 在init函数中注册插件
 func init() {
 	plugin.RegisterGlobalPlugin(NewMuouPlugin())
@@ -49,12 +78,30 @@ func init() {
 // MuouAsyncPlugin Muou异步插件
 type MuouAsyncPlugin struct {
 	*plugin.BaseAsyncPlugin
+	optimizedClient *http.Client
+}
+
+// createOptimizedHTTPClient 创建优化的HTTP客户端
+func createOptimizedHTTPClient() *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        MaxIdleConns,
+		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
+		MaxConnsPerHost:     MaxConnsPerHost,
+		IdleConnTimeout:     IdleConnTimeout,
+		DisableKeepAlives:   false,
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   DefaultTimeout,
+	}
 }
 
 // NewMuouPlugin 创建新的Muou异步插件
 func NewMuouPlugin() *MuouAsyncPlugin {
 	return &MuouAsyncPlugin{
 		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("muou", 3),
+		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
 
@@ -74,11 +121,24 @@ func (p *MuouAsyncPlugin) SearchWithResult(keyword string, ext map[string]interf
 
 // searchImpl 实现具体的搜索逻辑
 func (p *MuouAsyncPlugin) searchImpl(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 性能统计
+	start := time.Now()
+	atomic.AddInt64(&searchRequests, 1)
+	defer func() {
+		duration := time.Since(start).Nanoseconds()
+		atomic.AddInt64(&totalSearchTime, duration)
+	}()
+
+	// 使用优化的客户端
+	if p.optimizedClient != nil {
+		client = p.optimizedClient
+	}
+
 	// 1. 构建搜索URL
 	searchURL := fmt.Sprintf("http://123.666291.xyz/index.php/vod/search/wd/%s.html", url.QueryEscape(keyword))
 	
 	// 2. 创建带超时的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
 	
 	// 3. 创建请求
@@ -230,7 +290,7 @@ func (p *MuouAsyncPlugin) enhanceWithDetails(client *http.Client, results []mode
 	var wg sync.WaitGroup
 	
 	// 限制并发数
-	semaphore := make(chan struct{}, 5)
+	semaphore := make(chan struct{}, MaxConcurrency)
 	
 	for _, result := range results {
 		wg.Add(1)
@@ -255,12 +315,14 @@ func (p *MuouAsyncPlugin) enhanceWithDetails(client *http.Client, results []mode
 			// 检查缓存
 			if cached, ok := detailCache.Load(itemID); ok {
 				if cachedResult, ok := cached.(model.SearchResult); ok {
+					atomic.AddInt64(&cacheHits, 1)
 					mu.Lock()
 					enhancedResults = append(enhancedResults, cachedResult)
 					mu.Unlock()
 					return
 				}
 			}
+			atomic.AddInt64(&cacheMisses, 1)
 			
 			// 获取详情页链接
 			detailLinks := p.fetchDetailLinks(client, itemID)
@@ -310,10 +372,18 @@ func (p *MuouAsyncPlugin) doRequestWithRetry(req *http.Request, client *http.Cli
 
 // fetchDetailLinks 获取详情页的下载链接
 func (p *MuouAsyncPlugin) fetchDetailLinks(client *http.Client, itemID string) []model.Link {
+	// 性能统计
+	start := time.Now()
+	atomic.AddInt64(&detailPageRequests, 1)
+	defer func() {
+		duration := time.Since(start).Nanoseconds()
+		atomic.AddInt64(&totalDetailTime, duration)
+	}()
+
 	detailURL := fmt.Sprintf("http://123.666291.xyz/index.php/vod/detail/id/%s.html", itemID)
 	
 	// 创建带超时的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DetailTimeout)
 	defer cancel()
 	
 	// 创建请求
@@ -468,4 +538,37 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// GetPerformanceStats 获取性能统计信息
+func (p *MuouAsyncPlugin) GetPerformanceStats() map[string]interface{} {
+	totalSearchRequests := atomic.LoadInt64(&searchRequests)
+	totalDetailRequests := atomic.LoadInt64(&detailPageRequests)
+	totalCacheHits := atomic.LoadInt64(&cacheHits)
+	totalCacheMisses := atomic.LoadInt64(&cacheMisses)
+	totalSearchTime := atomic.LoadInt64(&totalSearchTime)
+	totalDetailTime := atomic.LoadInt64(&totalDetailTime)
+	
+	var avgSearchTime, avgDetailTime, cacheHitRate float64
+	if totalSearchRequests > 0 {
+		avgSearchTime = float64(totalSearchTime) / float64(totalSearchRequests) / 1e6 // 转换为毫秒
+	}
+	if totalDetailRequests > 0 {
+		avgDetailTime = float64(totalDetailTime) / float64(totalDetailRequests) / 1e6 // 转换为毫秒
+	}
+	if totalCacheHits+totalCacheMisses > 0 {
+		cacheHitRate = float64(totalCacheHits) / float64(totalCacheHits+totalCacheMisses) * 100
+	}
+	
+	return map[string]interface{}{
+		"search_requests":        totalSearchRequests,
+		"detail_page_requests":   totalDetailRequests,
+		"cache_hits":            totalCacheHits,
+		"cache_misses":          totalCacheMisses,
+		"cache_hit_rate":        cacheHitRate,
+		"avg_search_time_ms":    avgSearchTime,
+		"avg_detail_time_ms":    avgDetailTime,
+		"total_search_time_ns":  totalSearchTime,
+		"total_detail_time_ns":  totalDetailTime,
+	}
 }

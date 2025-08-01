@@ -37,6 +37,7 @@ import (
 	_ "pansou/plugin/ouge"
 	_ "pansou/plugin/zhizhen"
 	_ "pansou/plugin/huban"
+	_ "pansou/plugin/fox4k"
 	
 	"pansou/service"
 	"pansou/util"

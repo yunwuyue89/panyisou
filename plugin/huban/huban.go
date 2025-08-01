@@ -9,9 +9,27 @@ import (
 	"strings"
 	"time"
 	"context"
+	"sync/atomic"
 
 	"pansou/model"
 	"pansou/plugin"
+)
+
+const (
+	// 默认超时时间 - 优化为更短时间
+	DefaultTimeout = 8 * time.Second
+
+	// HTTP连接池配置
+	MaxIdleConns        = 200
+	MaxIdleConnsPerHost = 50
+	MaxConnsPerHost     = 100
+	IdleConnTimeout     = 90 * time.Second
+)
+
+// 性能统计（原子操作）
+var (
+	searchRequests  int64 = 0
+	totalSearchTime int64 = 0 // 纳秒
 )
 
 func init() {
@@ -45,12 +63,30 @@ var (
 // HubanAsyncPlugin Huban异步插件
 type HubanAsyncPlugin struct {
 	*plugin.BaseAsyncPlugin
+	optimizedClient *http.Client
+}
+
+// createOptimizedHTTPClient 创建优化的HTTP客户端
+func createOptimizedHTTPClient() *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        MaxIdleConns,
+		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
+		MaxConnsPerHost:     MaxConnsPerHost,
+		IdleConnTimeout:     IdleConnTimeout,
+		DisableKeepAlives:   false,
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   DefaultTimeout,
+	}
 }
 
 // NewHubanPlugin 创建新的Huban异步插件
 func NewHubanPlugin() *HubanAsyncPlugin {
 	return &HubanAsyncPlugin{
 		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("huban", 3),
+		optimizedClient: createOptimizedHTTPClient(),
 	}
 }
 
@@ -70,6 +106,19 @@ func (p *HubanAsyncPlugin) SearchWithResult(keyword string, ext map[string]inter
 
 // searchImpl 搜索实现（双域名支持）
 func (p *HubanAsyncPlugin) searchImpl(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 性能统计
+	start := time.Now()
+	atomic.AddInt64(&searchRequests, 1)
+	defer func() {
+		duration := time.Since(start).Nanoseconds()
+		atomic.AddInt64(&totalSearchTime, duration)
+	}()
+
+	// 使用优化的客户端
+	if p.optimizedClient != nil {
+		client = p.optimizedClient
+	}
+
 	// 定义双域名 - 主备模式
 	urls := []string{
 		fmt.Sprintf("http://103.45.162.207:20720/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
@@ -92,7 +141,7 @@ func (p *HubanAsyncPlugin) searchImpl(client *http.Client, keyword string, ext m
 // tryRequest 尝试单个域名请求
 func (p *HubanAsyncPlugin) tryRequest(searchURL string, client *http.Client) ([]model.SearchResult, error) {
 	// 创建HTTP请求
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
 	
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
@@ -417,9 +466,9 @@ func (p *HubanAsyncPlugin) deduplicateLinks(links []model.Link) []model.Link {
 	return result
 }
 
-// doRequestWithRetry 带重试的HTTP请求
+// doRequestWithRetry 带重试的HTTP请求（优化JSON API的重试策略）
 func (p *HubanAsyncPlugin) doRequestWithRetry(req *http.Request, client *http.Client) (*http.Response, error) {
-	maxRetries := 3
+	maxRetries := 2  // 对于JSON API减少重试次数
 	var lastErr error
 	
 	for i := 0; i < maxRetries; i++ {
@@ -434,11 +483,28 @@ func (p *HubanAsyncPlugin) doRequestWithRetry(req *http.Request, client *http.Cl
 			lastErr = err
 		}
 		
-		// 等待后重试
+		// JSON API快速重试：只等待很短时间
 		if i < maxRetries-1 {
-			time.Sleep(time.Duration(i+1) * time.Second)
+			time.Sleep(100 * time.Millisecond) // 从秒级改为100毫秒
 		}
 	}
 	
 	return nil, fmt.Errorf("[%s] 请求失败，重试%d次后仍失败: %w", p.Name(), maxRetries, lastErr)
+}
+
+// GetPerformanceStats 获取性能统计信息
+func (p *HubanAsyncPlugin) GetPerformanceStats() map[string]interface{} {
+	totalRequests := atomic.LoadInt64(&searchRequests)
+	totalTime := atomic.LoadInt64(&totalSearchTime)
+	
+	var avgTime float64
+	if totalRequests > 0 {
+		avgTime = float64(totalTime) / float64(totalRequests) / 1e6 // 转换为毫秒
+	}
+	
+	return map[string]interface{}{
+		"search_requests":    totalRequests,
+		"avg_search_time_ms": avgTime,
+		"total_search_time_ns": totalTime,
+	}
 }
