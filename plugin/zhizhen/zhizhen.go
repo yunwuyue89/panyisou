@@ -1,8 +1,8 @@
 package zhizhen
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,6 +13,7 @@ import (
 
 	"pansou/model"
 	"pansou/plugin"
+	"pansou/util/json"
 )
 
 const (
@@ -146,8 +147,13 @@ func (p *ZhizhenAsyncPlugin) searchImpl(client *http.Client, keyword string, ext
 	defer resp.Body.Close()
 	
 	// 解析JSON响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] 读取响应失败: %w", p.Name(), err)
+	}
+	
 	var apiResponse ZhizhenAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("[%s] 解析JSON响应失败: %w", p.Name(), err)
 	}
 	

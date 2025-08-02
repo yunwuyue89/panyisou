@@ -1,8 +1,8 @@
 package huban
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,6 +13,7 @@ import (
 
 	"pansou/model"
 	"pansou/plugin"
+	"pansou/util/json"
 )
 
 const (
@@ -121,8 +122,8 @@ func (p *HubanAsyncPlugin) searchImpl(client *http.Client, keyword string, ext m
 
 	// 定义双域名 - 主备模式
 	urls := []string{
-		fmt.Sprintf("http://103.45.162.207:20720/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
 		fmt.Sprintf("http://xsayang.fun:12512/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
+		// fmt.Sprintf("http://103.45.162.207:20720/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
 	}
 	
 	// 主备模式：优先使用第一个域名，失败时切换到第二个
@@ -164,8 +165,13 @@ func (p *HubanAsyncPlugin) tryRequest(searchURL string, client *http.Client) ([]
 	defer resp.Body.Close()
 	
 	// 解析JSON响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+	
 	var apiResponse HubanAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("解析JSON响应失败: %w", err)
 	}
 	

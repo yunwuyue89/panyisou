@@ -39,4 +39,10 @@ func MarshalString(v interface{}) (string, error) {
 // UnmarshalString 反序列化JSON字符串到对象
 func UnmarshalString(str string, v interface{}) error {
 	return API.Unmarshal([]byte(str), v)
+}
+
+// MarshalIndent 序列化对象到格式化的JSON
+func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
+	// 使用sonic的格式化功能
+	return API.MarshalIndent(v, prefix, indent)
 } 

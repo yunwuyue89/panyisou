@@ -19,6 +19,24 @@ import (
 	"regexp"
 )
 
+// 全局缓存写入管理器引用（避免循环依赖）
+var globalCacheWriteManager *cache.DelayedBatchWriteManager
+
+// SetGlobalCacheWriteManager 设置全局缓存写入管理器
+func SetGlobalCacheWriteManager(manager *cache.DelayedBatchWriteManager) {
+	globalCacheWriteManager = manager
+}
+
+// GetGlobalCacheWriteManager 获取全局缓存写入管理器
+func GetGlobalCacheWriteManager() *cache.DelayedBatchWriteManager {
+	return globalCacheWriteManager
+}
+
+// GetEnhancedTwoLevelCache 获取增强版两级缓存实例
+func GetEnhancedTwoLevelCache() *cache.EnhancedTwoLevelCache {
+	return enhancedTwoLevelCache
+}
+
 // 优先关键词列表
 var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附"}
 
@@ -186,6 +204,14 @@ func NewSearchService(pluginManager *plugin.PluginManager) *SearchService {
 	
 	// 将主缓存注入到异步插件中
 	injectMainCacheToAsyncPlugins(pluginManager, enhancedTwoLevelCache)
+	
+	// 🔗 确保缓存写入管理器设置了主缓存更新函数
+	if globalCacheWriteManager != nil && enhancedTwoLevelCache != nil {
+		globalCacheWriteManager.SetMainCacheUpdater(func(key string, data []byte, ttl time.Duration) error {
+			return enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
+		})
+		fmt.Println("✅ 主缓存更新函数已设置 (在SearchService中)")
+	}
 
 	return &SearchService{
 		pluginManager: pluginManager,
@@ -257,33 +283,43 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 			return err
 		}
 		
-		// 🔥 根据IsFinal参数选择缓存更新策略
+		// 🔥 使用新的缓存写入管理器
+		// 注意：获取外部引用需要导入main包
+		// 为了避免循环依赖，我们暂时通过全局变量访问
+		// TODO: 优化架构，使用依赖注入方式
+		
+		// 先更新内存缓存（立即可见）
+		if err := mainCache.SetMemoryOnly(key, data, ttl); err != nil {
+			return fmt.Errorf("内存缓存更新失败: %v", err)
+		}
+		
+		// 使用新的缓存写入管理器处理磁盘写入（智能批处理）
+		if cacheWriteManager := globalCacheWriteManager; cacheWriteManager != nil {
+			operation := &cache.CacheOperation{
+				Key:          key,
+				Data:         finalResults,      // 使用原始数据而不是序列化后的
+				TTL:          ttl,
+				IsFinal:      isFinal,
+				PluginName:   pluginName,
+				Keyword:      keyword,
+				Priority:     2,                 // 中等优先级
+				Timestamp:    time.Now(),
+				DataSize:     len(data),         // 序列化后的数据大小
+			}
+			
+			// 根据是否为最终结果设置优先级
+			if isFinal {
+				operation.Priority = 1           // 高优先级
+			}
+			
+			return cacheWriteManager.HandleCacheOperation(operation)
+		}
+		
+		// 兜底：如果缓存写入管理器不可用，使用原有逻辑
 		if isFinal {
-			// 最终结果：更新内存+磁盘缓存
-			// if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-			// 	displayKey := key[:8] + "..."
-			// 	if keyword != "" {
-			// 		fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
-			// 			displayKey, keyword, len(finalResults), len(data))
-			// 	} else {
-			// 		fmt.Printf("📝 [异步插件] 最终结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
-			// 			key, len(finalResults), len(data))
-			// 	}
-			// }
 			return mainCache.SetBothLevels(key, data, ttl)
 		} else {
-			// 部分结果：仅更新内存缓存
-			// if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-			// 	displayKey := key[:8] + "..."
-			// 	if keyword != "" {
-			// 		fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s(关键词:%s) | 结果数: %d | 数据长度: %d\n", 
-			// 			displayKey, keyword, len(finalResults), len(data))
-			// 	} else {
-			// 		fmt.Printf("📝 [异步插件] 部分结果缓存更新: %s | 结果数: %d | 数据长度: %d\n", 
-			// 			key, len(finalResults), len(data))
-			// 	}
-			// }
-			return mainCache.SetMemoryOnly(key, data, ttl)
+			return nil // 内存已更新，磁盘稍后批处理
 		}
 	}
 	
@@ -1128,17 +1164,11 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			// 如果磁盘缓存比内存缓存更新，会自动更新内存缓存并返回最新数据
 			data, hit, err = enhancedTwoLevelCache.Get(cacheKey)
 			
-			// 🔍 添加缓存状态调试日志
-			displayKey := cacheKey[:8] + "..."
-			fmt.Printf("🔍 [主服务] 缓存检查: %s(关键词:%s) | 命中: %v | 错误: %v \n", 
-				displayKey, keyword, hit, err)
-			
 			if err == nil && hit {
 				var results []model.SearchResult
 				if err := enhancedTwoLevelCache.GetSerializer().Deserialize(data, &results); err == nil {
 					// 返回缓存数据
-					displayKey := cacheKey[:8] + "..."
-					fmt.Printf("✅ [主服务] 缓存命中返回: %s(关键词:%s) | 结果数: %d\n", displayKey, keyword, len(results))
+					fmt.Printf("✅ [%s] 命中缓存 结果数: %d\n", keyword,  len(results))
 					return results, nil
 				} else {
 					displayKey := cacheKey[:8] + "..."
