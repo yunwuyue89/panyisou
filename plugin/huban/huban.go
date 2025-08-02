@@ -123,7 +123,7 @@ func (p *HubanAsyncPlugin) searchImpl(client *http.Client, keyword string, ext m
 	// 定义双域名 - 主备模式
 	urls := []string{
 		fmt.Sprintf("http://xsayang.fun:12512/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
-		// fmt.Sprintf("http://103.45.162.207:20720/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
+		fmt.Sprintf("http://103.45.162.207:20720/api.php/provide/vod?ac=detail&wd=%s", url.QueryEscape(keyword)),
 	}
 	
 	// 主备模式：优先使用第一个域名，失败时切换到第二个

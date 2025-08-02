@@ -3,52 +3,17 @@
 PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定义插件搜索。系统设计以性能和可扩展性为核心，支持并发搜索、结果智能排序和网盘类型分类。
 
 
-## 特性（[详见系统开发设计文档](docs/%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md)）
+## 特性（[详见系统设计文档](docs/%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md)）
 
-- **高性能搜索**：并发搜索多个Telegram频道，显著提升搜索速度；工作池设计，高效管理并发任务
+- **高性能搜索**：并发执行多个TG频道及异步插件搜索，显著提升搜索速度；工作池设计，高效管理并发任务
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
 - **智能排序**：基于插件等级、时间新鲜度和优先关键词的多维度综合排序算法
-  - **插件等级权重**：等级1插件(1000分) > 等级2插件(500分) > 等级3插件(0分)
-  - **优先关键词加分**：包含"合集"(420分)、"系列"(350分)等优先关键词的资源显著提升排序
-  - **时间新鲜度权重**：1天内(500分) > 3天内(400分) > 1周内(300分) > 1月内(200分)
-  - **综合得分排序**：总得分 = 插件得分 + 关键词得分 + 时间得分
-- **异步插件系统**：支持通过插件扩展搜索来源，已内置多个网盘搜索插件，详情参考[插件开发指南.md](docs/插件开发指南.md)；支持"尽快响应，持续处理"的异步搜索模式，解决了某些搜索源响应时间长的问题
-  - **双级超时控制**：短超时(4秒)确保快速响应，长超时(30秒)允许完整处理
-  - **持久化缓存**：缓存自动保存到磁盘，系统重启后自动恢复
-  - **数据安全保障**：程序终止时自动保存所有待写入数据到磁盘，防止数据丢失
-  - **智能缓存写入**：立即更新内存缓存确保用户体验，延迟批量写入磁盘提升性能和SSD寿命
-  - **优雅关闭**：完善的graceful shutdown机制，确保程序终止前所有数据安全保存
-  - **增量更新**：智能合并新旧结果，保留有价值的数据
-  - **主动更新**：异步插件在缓存异步更新后会主动更新主缓存(内存+磁盘)，使用户在不强制刷新的情况下也能获取最新数据
-  - **缓存优化**：智能跳过空结果和重复数据的缓存更新，显著减少无效操作，提升系统性能
-  - **插件管理**：启动时按优先级排序显示已加载插件，便于监控和调试
-- **插件扩展参数**：通过ext参数向插件传递自定义搜索参数，如英文标题、全量搜索标志等，提高搜索灵活性和精确度
+- **异步插件系统**：支持通过插件扩展搜索来源，支持"尽快响应，持续处理"的异步搜索模式，解决了某些搜索源响应时间长的问题。详情参考[插件开发指南.md](docs/插件开发指南.md)
 - **二级缓存**：分片内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能  
-  - **分片内存缓存**：基于CPU核心数动态分片的内存缓存，每个分片独立锁机制，支持高并发访问；使用原子操作优化热点数据更新，显著减少锁竞争
-  - **分片磁盘缓存**：采用动态分片数量（基于CPU核心数），通过位运算哈希算法将缓存键均匀分布，提高高并发场景下的I/O性能
-  - **序列化器接口**：Gob序列化提供更高性能和更小的结果大小
-  - **分离的缓存键**：TG搜索和插件搜索使用独立的缓存键，实现独立更新，互不影响，提高缓存命中率和更新效率
-  - **优化的缓存读取策略**：优先使用内存缓存，其次从磁盘读取缓存数据
-- **优化的HTTP服务器配置**：
-  - **自动计算的超时设置**：根据系统配置和异步插件需求自动调整读取超时、写入超时和空闲超时
-  - **连接数限制**：根据CPU核心数自动计算最大并发连接数，防止资源耗尽
-  - **高性能连接管理**：优化的连接复用和释放策略，提高高并发场景下的性能
 
 ## 支持的网盘类型
 
-- 百度网盘 (`baidu`)
-- 阿里云盘 (`aliyun`)
-- 夸克网盘 (`quark`)
-- 天翼云盘 (`tianyi`)
-- UC网盘 (`uc`)
-- 移动云盘 (`mobile`)
-- 115网盘 (`115`)
-- PikPak (`pikpak`)
-- 迅雷网盘 (`xunlei`)
-- 123网盘 (`123`)
-- 磁力链接 (`magnet`)
-- 电驴链接 (`ed2k`)
-- 其他 (`others`)
+百度网盘 (`baidu`)、阿里云盘 (`aliyun`)、夸克网盘 (`quark`)、天翼云盘 (`tianyi`)、UC网盘 (`uc`)、移动云盘 (`mobile`)、115网盘 (`115`)、PikPak (`pikpak`)、迅雷网盘 (`xunlei`)、123网盘 (`123`)、磁力链接 (`magnet`)、电驴链接 (`ed2k`)、其他 (`others`)
 
 ## 快速开始
 
@@ -187,7 +152,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -extldflags '-sta
 
 ```
 [program:pansou]
-environment=PORT=8888,CHANNELS="SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,pan115_share,bdwpzhpd,ysxb48,pankuake_share,jdjdn1111,yggpan,yunpanall,MCPH086,zaihuayun,Q66Share,NewAliPan,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,yunpanpan,hao115,yunpanshare,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,pan123pan,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,tgsearchers2,leoziyuan"
+environment=PORT=8888,CHANNELS="tgsearchers2,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,bdwpzhpd,ysxb48,jdjdn1111,yggpan,MCPH086,zaihuayun,Q66Share,NewAliPan,ypquark,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,leoziyuan"
 command=/home/work/pansou/pansou
 directory=/home/work/pansou
 autostart=true
