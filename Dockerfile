@@ -1,5 +1,7 @@
 # 构建阶段
-FROM golang:1.23-alpine AS builder
+# 使用 --platform=$BUILDPLATFORM 确保构建器始终在运行 Actions 的机器的原生架构上运行 (通常是 linux/amd64)
+# $BUILDPLATFORM 是 buildx 自动提供的变量
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
 
 # 安装构建依赖
 RUN apk add --no-cache git ca-certificates tzdata
@@ -21,13 +23,15 @@ ARG VERSION=dev
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 
-# 这是关键修改点：接收 buildx 自动传入的平台参数
-ARG TARGETARCH=amd64
+# 这是 buildx 自动传入的目标平台架构参数，例如 amd64, arm64
+ARG TARGETARCH
 
-# 构建应用 
+# 构建应用
+# Go 语言原生支持交叉编译，这里会根据传入的 TARGETARCH 编译出对应平台的可执行文件
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w -extldflags '-static'" -o pansou .
 
 # 运行阶段
+# 这一阶段会根据 buildx 的 --platform 参数选择正确的基础镜像 (例如 linux/arm64 会拉取 arm64/alpine)
 FROM alpine:3.19
 
 # 添加运行时依赖
@@ -37,6 +41,7 @@ RUN apk add --no-cache ca-certificates tzdata
 RUN mkdir -p /app/cache
 
 # 从构建阶段复制可执行文件
+# buildx 会智能地从对应平台的 builder 中复制正确的可执行文件
 COPY --from=builder /app/pansou /app/pansou
 
 # 设置工作目录
