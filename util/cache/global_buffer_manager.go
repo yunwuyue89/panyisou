@@ -116,6 +116,12 @@ type GlobalBufferStats struct {
 
 // NewGlobalBufferManager 创建全局缓冲区管理器
 func NewGlobalBufferManager(strategy GlobalBufferStrategy) *GlobalBufferManager {
+	// 高并发优化：强制使用插件策略，避免缓冲区爆炸
+	if strategy == BufferHybrid {
+		strategy = BufferByPlugin
+		fmt.Printf("⚠️ [缓冲区优化] 检测到混合策略，自动切换为插件策略以支持高并发\n")
+	}
+	
 	manager := &GlobalBufferManager{
 		strategy:          strategy,
 		maxBuffers:        50,  // 最大50个缓冲区
@@ -196,10 +202,10 @@ func (g *GlobalBufferManager) determineBufferID(op *CacheOperation) string {
 		return fmt.Sprintf("pattern_%s", pattern.KeywordPattern)
 		
 	case BufferHybrid:
-		// 混合策略：关键词+插件+时间窗口
-		timeWindow := op.Timestamp.Truncate(time.Minute) // 1分钟时间窗口
-		return fmt.Sprintf("hybrid_%s_%s_%d", 
-			op.Keyword, op.PluginName, timeWindow.Unix())
+		// 混合策略优化：插件+时间窗口（去掉关键词避免高并发爆炸）
+		timeWindow := op.Timestamp.Truncate(5 * time.Minute) // 5分钟时间窗口
+		return fmt.Sprintf("hybrid_%s_%d", 
+			op.PluginName, timeWindow.Unix())
 			
 	default:
 		return fmt.Sprintf("default_%s", op.Key)

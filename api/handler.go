@@ -1,7 +1,9 @@
 package api
 
 import (
+	// "fmt"
 	"net/http"
+	// "os"
 	
 	"github.com/gin-gonic/gin"
 	"pansou/config"
@@ -159,9 +161,9 @@ func SearchHandler(c *gin.Context) {
 		req.Channels = config.AppConfig.DefaultChannels
 	}
 	
-	// 如果未指定结果类型，默认返回merge
+	// 如果未指定结果类型，默认返回merge并转换为merged_by_type
 	if req.ResultType == "" {
-		req.ResultType = "merge"
+		req.ResultType = "merged_by_type"
 	} else if req.ResultType == "merge" {
 		// 将merge转换为merged_by_type，以兼容内部处理
 		req.ResultType = "merged_by_type"
@@ -183,6 +185,10 @@ func SearchHandler(c *gin.Context) {
 			req.Plugins = nil
 		}
 	}
+	
+	// 可选：启用调试输出（生产环境建议注释掉）
+	// fmt.Printf("🔧 [调试] 搜索参数: keyword=%s, channels=%v, concurrency=%d, refresh=%v, resultType=%s, sourceType=%s, plugins=%v, cloudTypes=%v, ext=%v\n", 
+	//	req.Keyword, req.Channels, req.Concurrency, req.ForceRefresh, req.ResultType, req.SourceType, req.Plugins, req.CloudTypes, req.Ext)
 	
 	// 执行搜索
 	result, err := searchService.Search(req.Keyword, req.Channels, req.Concurrency, req.ForceRefresh, req.ResultType, req.SourceType, req.Plugins, req.CloudTypes, req.Ext)
