@@ -20,11 +20,6 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 在 Github 上先[![Fork me on GitHub](https://raw.githubusercontent.com/fishforks/fish2018/refs/heads/main/forkme.png)](https://github.com/fish2018/pansou/fork)
 本项目，并点上 Star !!!
 
-### 环境要求
-
-- Go 1.18+
-- 可选：SOCKS5代理（用于访问受限地区的Telegram站点）
-
 ### 使用Docker部署
 
 #### 方法1：使用Docker Compose（推荐）
@@ -60,6 +55,11 @@ docker run -d --name pansou \
 ```
 
 ### 从源码安装
+
+#### 环境要求
+
+- Go 1.18+
+- 可选：SOCKS5代理（用于访问受限地区的Telegram站点）
 
 1. 克隆仓库
 
@@ -121,7 +121,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -extldflags '-sta
 
 ### 其他配置参考
 
-`supervisor`配置参考
+<details>
+<summary>点击展开 supervisor 配置参考</summary>
 
 ```
 [program:pansou]
@@ -138,7 +139,10 @@ stopasgroup=true
 killasgroup=true
 ```
 
-`nginx`配置参考
+</details>
+
+<details>
+<summary>点击展开 nginx 配置参考</summary>
 
 ```
 server {
@@ -181,6 +185,8 @@ server {
     }
 }
 ```
+
+</details>
 
 ## API文档
 
