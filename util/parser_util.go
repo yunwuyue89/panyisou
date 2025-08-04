@@ -488,6 +488,35 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 			}
 		})
 		
+		// 提取图片链接（只从消息内容区域提取，排除用户头像）
+		var images []string
+		var foundImages = make(map[string]bool) // 用于去重
+		
+		// 获取消息气泡区域，排除用户头像区域
+		messageBubble := messageDiv.Find(".tgme_widget_message_bubble")
+		
+		// 1. 从消息内容中的图片包装元素提取图片
+		messageBubble.Find(".tgme_widget_message_photo_wrap").Each(func(i int, photoWrap *goquery.Selection) {
+			// 检查style属性中的background-image
+			style, exists := photoWrap.Attr("style")
+			if exists {
+				imageURL := extractImageURLFromStyle(style)
+				if imageURL != "" && !foundImages[imageURL] {
+					foundImages[imageURL] = true
+					images = append(images, imageURL)
+				}
+			}
+		})
+		
+		// 2. 从消息内容中的其他可能包含图片的元素提取（排除用户头像）
+		messageBubble.Find("img").Each(func(i int, img *goquery.Selection) {
+			src, exists := img.Attr("src")
+			if exists && src != "" && !foundImages[src] {
+				foundImages[src] = true
+				images = append(images, src)
+			}
+		})
+		
 		// 只有包含链接的消息才添加到结果中
 		if len(links) > 0 {
 			results = append(results, model.SearchResult{
@@ -499,11 +528,59 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 				Content:   messageText,
 				Links:     links,
 				Tags:      tags,
+				Images:    images,
 			})
 		}
 	})
 
 	return results, nextPageParam, nil
+}
+
+// extractImageURLFromStyle 从CSS样式字符串中提取background-image的URL
+func extractImageURLFromStyle(style string) string {
+	// 查找background-image:url('...') 或 background-image:url("...")
+	startPattern := "background-image:url('"
+	endPattern := "')"
+	
+	startIndex := strings.Index(style, startPattern)
+	if startIndex != -1 {
+		startIndex += len(startPattern)
+		endIndex := strings.Index(style[startIndex:], endPattern)
+		if endIndex != -1 {
+			return style[startIndex : startIndex+endIndex]
+		}
+	}
+	
+	// 尝试双引号格式
+	startPattern = `background-image:url("`
+	endPattern = `")`
+	
+	startIndex = strings.Index(style, startPattern)
+	if startIndex != -1 {
+		startIndex += len(startPattern)
+		endIndex := strings.Index(style[startIndex:], endPattern)
+		if endIndex != -1 {
+			return style[startIndex : startIndex+endIndex]
+		}
+	}
+	
+	// 尝试无引号格式
+	startPattern = "background-image:url("
+	endPattern = ")"
+	
+	startIndex = strings.Index(style, startPattern)
+	if startIndex != -1 {
+		startIndex += len(startPattern)
+		endIndex := strings.Index(style[startIndex:], endPattern)
+		if endIndex != -1 {
+			url := style[startIndex : startIndex+endIndex]
+			// 移除可能的引号
+			url = strings.Trim(url, "'\"")
+			return url
+		}
+	}
+	
+	return ""
 }
 
 // extractTitle 从消息HTML和文本内容中提取标题

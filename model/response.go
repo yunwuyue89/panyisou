@@ -19,6 +19,7 @@ type SearchResult struct {
 	Content   string    `json:"content" sonic:"content"`
 	Links     []Link    `json:"links" sonic:"links"`
 	Tags      []string  `json:"tags,omitempty" sonic:"tags,omitempty"`
+	Images    []string  `json:"images,omitempty" sonic:"images,omitempty"` // TG消息中的图片链接
 }
 
 // MergedLink 合并后的网盘链接
@@ -28,6 +29,7 @@ type MergedLink struct {
 	Note     string    `json:"note" sonic:"note"`
 	Datetime time.Time `json:"datetime" sonic:"datetime"`
 	Source   string    `json:"source,omitempty" sonic:"source,omitempty"` // 数据来源：tg:频道名 或 plugin:插件名
+	Images   []string  `json:"images,omitempty" sonic:"images,omitempty"`   // TG消息中的图片链接
 }
 
 // MergedLinks 按网盘类型分组的合并链接

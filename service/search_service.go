@@ -993,6 +993,7 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 				Note:     title, // 使用找到的特定标题
 				Datetime: result.Datetime,
 				Source:   source, // 添加数据来源字段
+				Images:   result.Images, // 添加TG消息中的图片链接
 			}
 
 			// 检查是否已存在相同URL的链接

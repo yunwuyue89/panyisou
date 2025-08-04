@@ -17,9 +17,11 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 
 ## 快速开始
 
-在 Github 上先[![Fork me on GitHub](https://raw.githubusercontent.com/fishforks/fish2018/refs/heads/main/forkme.png)](https://github.com/fish2018/pansou/fork)本项目，并点上 Star !!!
+在 Github 上先[![Fork me on GitHub](https://raw.githubusercontent.com/fishforks/fish2018/refs/heads/main/forkme.png)](https://github.com/fish2018/pansou/fork)
+本项目，并点上 Star !!!
 
 ### 使用Docker部署
+
 
 #### 前后端集成版
 
@@ -294,7 +296,10 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
           "password": "1234"
         }
       ],
-      "tags": ["电影", "合集"]
+      "tags": ["电影", "合集"],
+      "images": [
+        "https://cdn1.cdn-telegram.org/file/xxx.jpg"
+      ]
     },
     // 更多结果...
   ],
@@ -305,7 +310,10 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
         "password": "1234",
         "note": "速度与激情全集1-10",
         "datetime": "2023-06-10T14:23:45Z",
-        "source": "tg:频道名称"
+        "source": "tg:频道名称",
+        "images": [
+          "https://cdn1.cdn-telegram.org/file/xxx.jpg"
+        ]
       },
       // 更多百度网盘链接...
     ],
@@ -315,7 +323,8 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
         "password": "",
         "note": "凡人修仙传",
         "datetime": "2023-06-10T15:30:22Z",
-        "source": "plugin:插件名"
+        "source": "plugin:插件名",
+        "images": []
       }
     ],
     "aliyun": [
@@ -332,6 +341,9 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
   - `tg:频道名称`: 来自Telegram频道
   - `plugin:插件名`: 来自指定插件
   - `unknown`: 未知来源
+- `images`: TG消息中的图片链接数组（可选字段）
+  - 仅在来源为Telegram频道且消息包含图片时出现
+
 
 **错误响应**：
 
