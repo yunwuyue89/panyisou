@@ -25,12 +25,29 @@ const (
 	MaxIdleConnsPerHost = 50
 	MaxConnsPerHost     = 100
 	IdleConnTimeout     = 90 * time.Second
+	
+	// 请求来源控制 - 默认开启，提高安全性
+	EnableRefererCheck = true
+	
+	// 调试日志开关
+	DebugLog = false
 )
 
 // 性能统计（原子操作）
 var (
 	searchRequests  int64 = 0
 	totalSearchTime int64 = 0 // 纳秒
+)
+
+// 请求来源控制配置
+var (
+	// 允许的请求来源列表 - 参考panyq插件实现
+	// 支持前缀匹配，例如 "https://example.com" 会匹配 "https://example.com/path"
+	AllowedReferers = []string{
+		"https://dm.xueximeng.com",
+		"http://localhost:8888",
+		// 可以根据需要添加更多允许的来源
+	}
 )
 
 func init() {
@@ -93,6 +110,33 @@ func NewHubanPlugin() *HubanAsyncPlugin {
 
 // Search 同步搜索接口
 func (p *HubanAsyncPlugin) Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 请求来源检查 - 参考panyq插件实现
+	if EnableRefererCheck && ext != nil {
+		referer := ""
+		if refererVal, ok := ext["referer"].(string); ok {
+			referer = refererVal
+		}
+		
+		// 检查referer是否在允许列表中
+		allowed := false
+		for _, allowedReferer := range AllowedReferers {
+			if strings.HasPrefix(referer, allowedReferer) {
+				if DebugLog {
+					fmt.Printf("[%s] 允许来自 %s 的请求\n", p.Name(), referer)
+				}
+				allowed = true
+				break
+			}
+		}
+		
+		if !allowed {
+			if DebugLog {
+				fmt.Printf("[%s] 拒绝来自 %s 的请求\n", p.Name(), referer)
+			}
+			return nil, fmt.Errorf("[%s] 请求来源不被允许", p.Name())
+		}
+	}
+	
 	result, err := p.SearchWithResult(keyword, ext)
 	if err != nil {
 		return nil, err
@@ -513,4 +557,41 @@ func (p *HubanAsyncPlugin) GetPerformanceStats() map[string]interface{} {
 		"avg_search_time_ms": avgTime,
 		"total_search_time_ns": totalTime,
 	}
+}
+
+// AddAllowedReferer 添加允许的请求来源
+func AddAllowedReferer(referer string) {
+	for _, existing := range AllowedReferers {
+		if existing == referer {
+			return // 已存在，不重复添加
+		}
+	}
+	AllowedReferers = append(AllowedReferers, referer)
+}
+
+// RemoveAllowedReferer 移除允许的请求来源
+func RemoveAllowedReferer(referer string) {
+	for i, existing := range AllowedReferers {
+		if existing == referer {
+			AllowedReferers = append(AllowedReferers[:i], AllowedReferers[i+1:]...)
+			return
+		}
+	}
+}
+
+// GetAllowedReferers 获取当前允许的请求来源列表
+func GetAllowedReferers() []string {
+	result := make([]string, len(AllowedReferers))
+	copy(result, AllowedReferers)
+	return result
+}
+
+// IsRefererAllowed 检查指定的referer是否被允许
+func IsRefererAllowed(referer string) bool {
+	for _, allowedReferer := range AllowedReferers {
+		if strings.HasPrefix(referer, allowedReferer) {
+			return true
+		}
+	}
+	return false
 }

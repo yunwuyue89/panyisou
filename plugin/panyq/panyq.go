@@ -75,7 +75,7 @@ var (
 	// 允许的请求来源列表，可以直接修改这个变量来控制 ext={"referer":"xxx"}
 	AllowedReferers = []string{
 		"https://dm.xueximeng.com",
-		"http://localhost",
+		"http://localhost:8888",
 		// 可以添加更多允许的来源
 	}
 	
