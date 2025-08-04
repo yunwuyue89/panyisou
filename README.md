@@ -17,12 +17,47 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 
 ## 快速开始
 
-在 Github 上先[![Fork me on GitHub](https://raw.githubusercontent.com/fishforks/fish2018/refs/heads/main/forkme.png)](https://github.com/fish2018/pansou/fork)
-本项目，并点上 Star !!!
+在 Github 上先[![Fork me on GitHub](https://raw.githubusercontent.com/fishforks/fish2018/refs/heads/main/forkme.png)](https://github.com/fish2018/pansou/fork)本项目，并点上 Star !!!
 
 ### 使用Docker部署
 
-#### 方法1：使用Docker Compose（推荐）
+#### 前后端集成版
+
+##### 直接使用Docker命令
+
+一键启动，开箱即用，无需任何配置
+
+```
+docker run -d --name pansou -p 80:80 ghcr.io/fish2018/pansou-web
+```
+
+##### 使用Docker Compose（推荐）
+```
+# 下载配置文件
+curl -o docker-compose.yml https://raw.githubusercontent.com/fish2018/pansou-web/main/docker-compose.yml
+
+# 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+```
+
+#### 纯后端API
+
+##### 直接使用Docker命令
+
+```bash
+docker run -d --name pansou \
+  -p 8888:8888 \
+  -v pansou-cache:/app/cache \
+  -e CHANNELS="tgsearchers2,SharePanBaidu,yunpanxunlei" \
+  -e CACHE_ENABLED=true \
+  -e ASYNC_PLUGIN_ENABLED=true \
+  ghcr.io/fish2018/pansou:latest
+```
+
+##### 使用Docker Compose（推荐）
 
 1. 下载docker-compose.yml文件
 
@@ -40,18 +75,6 @@ docker-compose up -d
 
 ```
 http://localhost:8888
-```
-
-#### 方法2：直接使用Docker命令
-
-```bash
-docker run -d --name pansou \
-  -p 8888:8888 \
-  -v pansou-cache:/app/cache \
-  -e CHANNELS="tgsearchers2,SharePanBaidu,yunpanxunlei" \
-  -e CACHE_ENABLED=true \
-  -e ASYNC_PLUGIN_ENABLED=true \
-  ghcr.io/fish2018/pansou:latest
 ```
 
 ### 从源码安装
