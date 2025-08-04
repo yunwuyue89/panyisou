@@ -208,6 +208,7 @@ type BaseAsyncPlugin struct {
 	currentKeyword     string        // 当前搜索的关键词，用于日志显示
 	finalUpdateTracker map[string]bool // 追踪已更新的最终结果缓存
 	finalUpdateMutex   sync.RWMutex  // 保护finalUpdateTracker的并发访问
+	skipServiceFilter  bool          // 是否跳过Service层的关键词过滤
 }
 
 // NewBaseAsyncPlugin 创建基础异步插件
@@ -240,6 +241,41 @@ func NewBaseAsyncPlugin(name string, priority int) *BaseAsyncPlugin {
 		},
 		cacheTTL:           cacheTTL,
 		finalUpdateTracker: make(map[string]bool), // 初始化缓存更新追踪器
+		skipServiceFilter:  false,                  // 默认不跳过Service层过滤
+	}
+}
+
+// NewBaseAsyncPluginWithFilter 创建基础异步插件（支持设置Service层过滤参数）
+func NewBaseAsyncPluginWithFilter(name string, priority int, skipServiceFilter bool) *BaseAsyncPlugin {
+	// 确保异步插件已初始化
+	if !initialized {
+		initAsyncPlugin()
+	}
+	
+	// 确定超时和缓存时间
+	responseTimeout := defaultAsyncResponseTimeout
+	processingTimeout := defaultPluginTimeout
+	cacheTTL := defaultCacheTTL
+	
+	// 如果配置已初始化，则使用配置中的值
+	if config.AppConfig != nil {
+		responseTimeout = config.AppConfig.AsyncResponseTimeoutDur
+		processingTimeout = config.AppConfig.PluginTimeout
+		cacheTTL = time.Duration(config.AppConfig.AsyncCacheTTLHours) * time.Hour
+	}
+	
+	return &BaseAsyncPlugin{
+		name:     name,
+		priority: priority,
+		client: &http.Client{
+			Timeout: responseTimeout,
+		},
+		backgroundClient: &http.Client{
+			Timeout: processingTimeout,
+		},
+		cacheTTL:           cacheTTL,
+		finalUpdateTracker: make(map[string]bool), // 初始化缓存更新追踪器
+		skipServiceFilter:  skipServiceFilter,     // 使用传入的过滤设置
 	}
 }
 
@@ -266,6 +302,11 @@ func (p *BaseAsyncPlugin) Name() string {
 // Priority 返回插件优先级
 func (p *BaseAsyncPlugin) Priority() int {
 	return p.priority
+}
+
+// SkipServiceFilter 返回是否跳过Service层的关键词过滤
+func (p *BaseAsyncPlugin) SkipServiceFilter() bool {
+	return p.skipServiceFilter
 }
 
 // AsyncSearch 异步搜索基础方法

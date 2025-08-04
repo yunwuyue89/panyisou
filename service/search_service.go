@@ -38,7 +38,7 @@ func GetEnhancedTwoLevelCache() *cache.EnhancedTwoLevelCache {
 }
 
 // 优先关键词列表
-var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附"}
+var priorityKeywords = []string{"合集", "系列", "全", "完", "最新", "附", "complete"}
 
 // extractKeywordFromCacheKey 从缓存键中提取关键词（简化版）
 func extractKeywordFromCacheKey(cacheKey string) string {
@@ -952,8 +952,21 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 				}
 			}
 			
-			// 如果关键词不为空，且标题不包含关键词，则跳过此链接
-			if keyword != "" && !strings.Contains(strings.ToLower(title), lowerKeyword) {
+			// 检查插件是否需要跳过Service层过滤
+			var skipKeywordFilter bool = false
+			if result.UniqueID != "" && strings.Contains(result.UniqueID, "-") {
+				parts := strings.SplitN(result.UniqueID, "-", 2)
+				if len(parts) >= 1 {
+					pluginName := parts[0]
+					// 通过插件注册表动态获取过滤设置
+					if pluginInstance, exists := plugin.GetPluginByName(pluginName); exists {
+						skipKeywordFilter = pluginInstance.SkipServiceFilter()
+					}
+				}
+			}
+			
+			// 如果关键词不为空，且标题不包含关键词，且不是跳过过滤的插件，则跳过此链接
+			if !skipKeywordFilter && keyword != "" && !strings.Contains(strings.ToLower(title), lowerKeyword) {
 				continue
 			}
 			

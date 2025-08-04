@@ -33,6 +33,10 @@ type AsyncSearchPlugin interface {
 	
 	// Search 兼容性方法（内部调用AsyncSearch）
 	Search(keyword string, ext map[string]interface{}) ([]model.SearchResult, error)
+	
+	// SkipServiceFilter 返回是否跳过Service层的关键词过滤
+	// 对于磁力搜索等需要宽泛结果的插件，应返回true
+	SkipServiceFilter() bool
 }
 
 // RegisterGlobalPlugin 注册异步插件到全局注册表
@@ -63,6 +67,15 @@ func GetRegisteredPlugins() []AsyncSearchPlugin {
 	}
 	
 	return plugins
+}
+
+// GetPluginByName 根据名称获取已注册的插件
+func GetPluginByName(name string) (AsyncSearchPlugin, bool) {
+	globalRegistryLock.RLock()
+	defer globalRegistryLock.RUnlock()
+	
+	plugin, exists := globalRegistry[name]
+	return plugin, exists
 }
 
 // PluginManager 异步插件管理器

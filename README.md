@@ -8,7 +8,7 @@ PanSou是一个高性能的网盘资源搜索API服务，支持TG搜索和自定
 - **高性能搜索**：并发执行多个TG频道及异步插件搜索，显著提升搜索速度；工作池设计，高效管理并发任务
 - **网盘类型分类**：自动识别多种网盘链接，按类型归类展示
 - **智能排序**：基于插件等级、时间新鲜度和优先关键词的多维度综合排序算法
-- **异步插件系统**：支持通过插件扩展搜索来源，支持"尽快响应，持续处理"的异步搜索模式，解决了某些搜索源响应时间长的问题。详情参考[插件开发指南](docs/插件开发指南.md)
+- **异步插件系统**：支持通过插件扩展搜索来源，支持"尽快响应，持续处理"的异步搜索模式，解决了某些搜索源响应时间长的问题。详情参考[**插件开发指南**](docs/插件开发指南.md)
 - **二级缓存**：分片内存+分片磁盘缓存机制，大幅提升重复查询速度和并发性能  
 
 ## 支持的网盘类型
@@ -70,70 +70,42 @@ cd pansou
 
 2. 配置环境变量（可选）
 
+#### 🚀 基础配置
+
+| 环境变量 | 描述 | 默认值 | 说明 |
+|----------|------|--------|------|
+| **PORT** | 服务端口 | `8888` | 修改服务监听端口 |
+| **PROXY** | SOCKS5代理 | 无 | 如：`socks5://127.0.0.1:1080` |
+| **CHANNELS** | 默认搜索的TG频道 | `tgsearchers2` | 多个频道用逗号分隔 |
+
+#### 🔧 高级配置（默认值即可）
+
+<details>
+<summary>点击展开高级配置选项（通常不需要修改）</summary>
+
 | 环境变量 | 描述 | 默认值 |
 |----------|------|--------|
-| CHANNELS | 默认搜索频道列表（逗号分隔） | tgsearchers2 |
-| CONCURRENCY | 默认并发数 | 频道数+插件数+10 |
-| PORT | 服务端口 | 8888 |
-| PROXY | SOCKS5代理 | - |
-| CACHE_ENABLED | 是否启用缓存 | true |
-| CACHE_PATH | 缓存文件路径 | ./cache |
-| CACHE_MAX_SIZE | 最大缓存大小(MB) | 100 |
-| CACHE_TTL | 缓存生存时间(分钟) | 60 |
-| SHARD_COUNT | 缓存分片数量 | 8 |
-| SERIALIZER_TYPE | 序列化器类型(gob/json) | gob |
-| CACHE_WRITE_STRATEGY | 缓存写入策略(immediate/hybrid) | hybrid |
-| ENABLE_COMPRESSION | 是否启用压缩 | false |
-| MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | 1024 |
-| GC_PERCENT | GC触发百分比 | 100 |
-| OPTIMIZE_MEMORY | 是否优化内存 | true |
-| PLUGIN_TIMEOUT | 插件执行超时时间(秒) | 30 |
-| ASYNC_PLUGIN_ENABLED | 是否启用异步插件 | true |
-| ASYNC_RESPONSE_TIMEOUT | 异步响应超时时间(秒) | 4 |
-| ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | CPU核心数×5，最小20 |
-| ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 工作者数量×5，最小100 |
-| ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | 1 |
-| HTTP_READ_TIMEOUT | HTTP读取超时时间(秒) | 自动计算，最小30 |
-| HTTP_WRITE_TIMEOUT | HTTP写入超时时间(秒) | 自动计算，最小60 |
-| HTTP_IDLE_TIMEOUT | HTTP空闲连接超时时间(秒) | 120 |
-| HTTP_MAX_CONNS | HTTP最大并发连接数 | CPU核心数×25，最小100，最大500 |
-| ASYNC_LOG_ENABLED | 异步插件详细日志开关 | true |
+| CONCURRENCY | 并发搜索数 | 自动计算 |
+| CACHE_TTL | 缓存有效期（分钟） | `60` |
+| CACHE_MAX_SIZE | 最大缓存大小(MB) | `100` |
+| PLUGIN_TIMEOUT | 插件超时时间(秒) | `30` |
+| ASYNC_RESPONSE_TIMEOUT | 快速响应超时(秒) | `4` |
+| ASYNC_LOG_ENABLED** | 异步插件详细日志 | `true` | 
+| CACHE_PATH | 缓存文件路径 | `./cache` |
+| SHARD_COUNT | 缓存分片数量 | `8` |
+| CACHE_WRITE_STRATEGY | 缓存写入策略 | `hybrid` |
+| ENABLE_COMPRESSION | 是否启用压缩 | `false` |
+| MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | `1024` |
+| GC_PERCENT | Go GC触发百分比 | `100` |
+| ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | CPU核心数×5 |
+| ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 工作者数×5 |
+| ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | `1` |
+| HTTP_READ_TIMEOUT | HTTP读取超时(秒) | 自动计算 |
+| HTTP_WRITE_TIMEOUT | HTTP写入超时(秒) | 自动计算 |
+| HTTP_IDLE_TIMEOUT | HTTP空闲超时(秒) | `120` |
+| HTTP_MAX_CONNS | HTTP最大连接数 | 自动计算 |
 
-### 🔧 性能优化配置
-
-为不同环境提供的优化配置方案：
-
-#### macOS/笔记本电脑配置 (推荐)
-```bash
-# 针对macOS系统线程限制优化的配置
-export HTTP_MAX_CONNS=200                   # 降低连接数
-export ASYNC_MAX_BACKGROUND_WORKERS=15     # 减少工作者数量  
-export ASYNC_MAX_BACKGROUND_TASKS=75       # 减少任务队列
-export CONCURRENCY=30                      # 适中的并发数
-export ASYNC_LOG_ENABLED=false             # 关闭详细日志
-```
-
-#### 服务器/云环境配置
-```bash
-# 高性能服务器配置
-export HTTP_MAX_CONNS=500                   # 更高的连接数
-export ASYNC_MAX_BACKGROUND_WORKERS=40     # 更多工作者
-export ASYNC_MAX_BACKGROUND_TASKS=200      # 更大任务队列
-export CONCURRENCY=50                      # 高并发数
-export CACHE_MAX_SIZE=500                  # 更大缓存
-export ASYNC_LOG_ENABLED=false             # 关闭详细日志
-```
-
-#### 资源受限环境配置
-```bash
-# 低配置服务器或容器环境
-export HTTP_MAX_CONNS=100                   # 最低连接数
-export ASYNC_MAX_BACKGROUND_WORKERS=8      # 最少工作者
-export ASYNC_MAX_BACKGROUND_TASKS=40       # 最小任务队列
-export CONCURRENCY=15                      # 低并发数
-export CACHE_MAX_SIZE=50                   # 较小缓存
-```
-
+</details>
 
 3. 构建
 

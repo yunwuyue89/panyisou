@@ -57,7 +57,7 @@ func (p *JikepanAsyncV2Plugin) doSearch(client *http.Client, keyword string, ext
 		"is_all": false,
 	}
 	
-	// 检查ext中是否包含title_en参数，如果有则使用它
+	// 检查ext中是否包含自定义参数，如果有则使用它
 	if ext != nil {
 		if isAll, ok := ext["is_all"].(bool); ok && isAll {
 			// 使用全量搜索，时间大约10秒

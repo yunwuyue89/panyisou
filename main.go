@@ -27,7 +27,7 @@ import (
 	_ "pansou/plugin/duoduo"
 	_ "pansou/plugin/fox4k"
 	_ "pansou/plugin/hdr4k"
-	// _ "pansou/plugin/huban"
+	_ "pansou/plugin/huban"
 	_ "pansou/plugin/hunhepan"
 	_ "pansou/plugin/jikepan"
 	_ "pansou/plugin/labi"
@@ -43,6 +43,7 @@ import (
 	_ "pansou/plugin/wanou"
 	_ "pansou/plugin/xuexizhinan"
 	_ "pansou/plugin/zhizhen"
+	_ "pansou/plugin/thepiratebay"
 )
 
 // 全局缓存写入管理器
