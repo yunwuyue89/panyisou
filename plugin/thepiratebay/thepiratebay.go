@@ -159,7 +159,7 @@ func (p *ThePirateBayPlugin) searchImpl(client *http.Client, keyword string, ext
 		}
 	}
 	
-	encodedKeyword := url.QueryEscape(searchKeyword)
+	encodedKeyword := url.PathEscape(searchKeyword)
 	allResults := make([]model.SearchResult, 0)
 	
 	// 1. 搜索第一页，获取总页数
