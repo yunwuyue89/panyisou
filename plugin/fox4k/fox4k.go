@@ -3,8 +3,12 @@ package fox4k
 import (
 	"context"
 	"fmt"
+	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,23 +17,39 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/proxy"
 	"pansou/model"
 	"pansou/plugin"
 )
 
 // 常量定义
 const (
+	// 基础URL
+	BaseURL = "https://4kfox.com"
+	// BaseURL = "https://btnull.pro/"
+	// BaseURL = "https://www.4kdy.vip/"
+	
 	// 搜索URL格式
-	SearchURL = "https://www.4kfox.com/search/%s-------------.html"
+	SearchURL = BaseURL + "/search/%s-------------.html"
 	
 	// 分页搜索URL格式
-	SearchPageURL = "https://www.4kfox.com/search/%s----------%d---.html"
+	SearchPageURL = BaseURL + "/search/%s----------%d---.html"
 	
 	// 详情页URL格式
-	DetailURL = "https://www.4kfox.com/video/%s.html"
+	DetailURL = BaseURL + "/video/%s.html"
 	
-	// 默认超时时间 - 优化为更短时间
-	DefaultTimeout = 8 * time.Second
+	// 默认超时时间 - 增加超时时间避免网络慢的问题
+	DefaultTimeout = 15 * time.Second
+	
+	// 代理配置
+	DefaultHTTPProxy  = "http://154.219.110.34:51422"
+	DefaultSocks5Proxy = "socks5://154.219.110.34:51423"
+	
+	// 调试开关 - 默认关闭
+	DebugMode = false
+	
+	// 代理开关 - 默认关闭
+	ProxyEnabled = false
 	
 	// 并发数限制 - 大幅提高并发数
 	MaxConcurrency = 50
@@ -113,8 +133,8 @@ type Fox4kPlugin struct {
 	optimizedClient *http.Client
 }
 
-// createOptimizedHTTPClient 创建优化的HTTP客户端
-func createOptimizedHTTPClient() *http.Client {
+// createProxyTransport 创建支持代理的传输层
+func createProxyTransport(proxyURL string) (*http.Transport, error) {
 	transport := &http.Transport{
 		MaxIdleConns:        MaxIdleConns,
 		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
@@ -124,6 +144,55 @@ func createOptimizedHTTPClient() *http.Client {
 		DisableCompression:  false,
 		WriteBufferSize:     16 * 1024,
 		ReadBufferSize:      16 * 1024,
+	}
+
+	if proxyURL == "" {
+		return transport, nil
+	}
+
+	if strings.HasPrefix(proxyURL, "socks5://") {
+		// SOCKS5代理
+		dialer, err := proxy.SOCKS5("tcp", strings.TrimPrefix(proxyURL, "socks5://"), nil, proxy.Direct)
+		if err != nil {
+			return nil, fmt.Errorf("创建SOCKS5代理失败: %w", err)
+		}
+		transport.Dial = dialer.Dial
+		debugPrintf("🔧 [Fox4k DEBUG] 使用SOCKS5代理: %s\n", proxyURL)
+	} else {
+		// HTTP代理
+		parsedURL, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("解析代理URL失败: %w", err)
+		}
+		transport.Proxy = http.ProxyURL(parsedURL)
+		debugPrintf("🔧 [Fox4k DEBUG] 使用HTTP代理: %s\n", proxyURL)
+	}
+
+	return transport, nil
+}
+
+// createOptimizedHTTPClient 创建优化的HTTP客户端（支持代理）
+func createOptimizedHTTPClient() *http.Client {
+	var selectedProxy string
+	
+	if ProxyEnabled {
+		// 随机选择代理类型
+		proxyTypes := []string{"", DefaultHTTPProxy, DefaultSocks5Proxy}
+		selectedProxy = proxyTypes[rand.Intn(len(proxyTypes))]
+	} else {
+		// 代理未启用，使用直连
+		selectedProxy = ""
+		debugPrintf("🔧 [Fox4k DEBUG] 代理功能已禁用，使用直连模式\n")
+	}
+	
+	transport, err := createProxyTransport(selectedProxy)
+	if err != nil {
+		debugPrintf("❌ [Fox4k DEBUG] 创建代理传输层失败: %v，使用直连\n", err)
+		transport, _ = createProxyTransport("")
+	}
+	
+	if selectedProxy == "" && ProxyEnabled {
+		debugPrintf("🔧 [Fox4k DEBUG] 使用直连模式\n")
 	}
 	
 	return &http.Client{
@@ -137,6 +206,13 @@ func NewFox4kPlugin() *Fox4kPlugin {
 	return &Fox4kPlugin{
 		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("fox4k", 3), 
 		optimizedClient: createOptimizedHTTPClient(),
+	}
+}
+
+// debugPrintf 调试输出函数
+func debugPrintf(format string, args ...interface{}) {
+	if DebugMode {
+		fmt.Printf(format, args...)
 	}
 }
 
@@ -171,11 +247,27 @@ func (p *Fox4kPlugin) Search(keyword string, ext map[string]interface{}) ([]mode
 
 // SearchWithResult 执行搜索并返回包含IsFinal标记的结果
 func (p *Fox4kPlugin) SearchWithResult(keyword string, ext map[string]interface{}) (model.PluginSearchResult, error) {
-	return p.AsyncSearchWithResult(keyword, p.searchImpl, p.MainCacheKey, ext)
+	debugPrintf("🔧 [Fox4k DEBUG] SearchWithResult 开始 - keyword: %s, MainCacheKey: '%s'\n", keyword, p.MainCacheKey)
+	
+	result, err := p.AsyncSearchWithResult(keyword, p.searchImpl, p.MainCacheKey, ext)
+	
+	debugPrintf("🔧 [Fox4k DEBUG] SearchWithResult 完成 - 结果数: %d, IsFinal: %v, 错误: %v\n", 
+		len(result.Results), result.IsFinal, err)
+	
+	if len(result.Results) > 0 {
+		debugPrintf("🔧 [Fox4k DEBUG] 前3个结果示例:\n")
+		for i, r := range result.Results {
+			if i >= 3 { break }
+			debugPrintf("  %d. 标题: %s, 链接数: %d\n", i+1, r.Title, len(r.Links))
+		}
+	}
+	
+	return result, err
 }
 
 // searchImpl 实现具体的搜索逻辑（支持分页）
 func (p *Fox4kPlugin) searchImpl(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	debugPrintf("🔧 [Fox4k DEBUG] searchImpl 开始执行 - keyword: %s\n", keyword)
 	startTime := time.Now()
 	atomic.AddInt64(&searchRequests, 1)
 	
@@ -187,7 +279,7 @@ func (p *Fox4kPlugin) searchImpl(client *http.Client, keyword string, ext map[st
 	encodedKeyword := url.QueryEscape(keyword)
 	allResults := make([]model.SearchResult, 0)
 	
-	// 1. 搜索第一页
+	// 1. 搜索第一页，获取总页数
 	firstPageResults, totalPages, err := p.searchPage(client, encodedKeyword, 1)
 	if err != nil {
 		return nil, err
@@ -237,11 +329,18 @@ func (p *Fox4kPlugin) searchImpl(client *http.Client, keyword string, ext map[st
 	searchDuration := time.Since(startTime)
 	atomic.AddInt64(&totalSearchTime, int64(searchDuration))
 	
+	debugPrintf("🔧 [Fox4k DEBUG] searchImpl 完成 - 原始结果: %d, 过滤后结果: %d, 耗时: %v\n", 
+		len(allResults), len(results), searchDuration)
+	
 	return results, nil
 }
 
+
+
 // searchPage 搜索指定页面
 func (p *Fox4kPlugin) searchPage(client *http.Client, encodedKeyword string, page int) ([]model.SearchResult, int, error) {
+	debugPrintf("🔧 [Fox4k DEBUG] searchPage 开始 - 第%d页, keyword: %s\n", page, encodedKeyword)
+	
 	// 1. 构建搜索URL
 	var searchURL string
 	if page == 1 {
@@ -249,6 +348,8 @@ func (p *Fox4kPlugin) searchPage(client *http.Client, encodedKeyword string, pag
 	} else {
 		searchURL = fmt.Sprintf(SearchPageURL, encodedKeyword, page)
 	}
+	
+	debugPrintf("🔧 [Fox4k DEBUG] 构建的URL: %s\n", searchURL)
 	
 	// 2. 创建带超时的上下文
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
@@ -260,29 +361,91 @@ func (p *Fox4kPlugin) searchPage(client *http.Client, encodedKeyword string, pag
 		return nil, 0, fmt.Errorf("[%s] 创建请求失败: %w", p.Name(), err)
 	}
 	
-	// 4. 设置完整的请求头
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+	// 4. 设置完整的请求头（包含随机UA和IP）
+	randomUA := getRandomUA()
+	randomIP := generateRandomIP()
+	
+	req.Header.Set("User-Agent", randomUA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("Referer", "https://www.4kfox.com/")
+	req.Header.Set("Referer", BaseURL+"/")
+	req.Header.Set("X-Forwarded-For", randomIP)
+	req.Header.Set("X-Real-IP", randomIP)
+	req.Header.Set("sec-ch-ua-platform", "macOS")
+	
+	debugPrintf("🔧 [Fox4k DEBUG] 使用随机UA: %s\n", randomUA)
+	debugPrintf("🔧 [Fox4k DEBUG] 使用随机IP: %s\n", randomIP)
 	
 	// 5. 发送HTTP请求
+	debugPrintf("🔧 [Fox4k DEBUG] 开始发送HTTP请求到: %s\n", searchURL)
+	debugPrintf("🔧 [Fox4k DEBUG] 请求头信息:\n")
+	if DebugMode {
+		for key, values := range req.Header {
+			for _, value := range values {
+				debugPrintf("    %s: %s\n", key, value)
+			}
+		}
+	}
+	
+	startTime := time.Now()
 	resp, err := p.doRequestWithRetry(req, client)
+	requestDuration := time.Since(startTime)
+	
 	if err != nil {
+		debugPrintf("❌ [Fox4k DEBUG] HTTP请求失败 (耗时: %v): %v\n", requestDuration, err)
+		debugPrintf("❌ [Fox4k DEBUG] 错误类型分析:\n")
+		if netErr, ok := err.(*url.Error); ok {
+			fmt.Printf("    URL错误: %v\n", netErr.Err)
+			if netErr.Timeout() {
+				fmt.Printf("    -> 这是超时错误\n")
+			}
+			if netErr.Temporary() {
+				fmt.Printf("    -> 这是临时错误\n")
+			}
+		}
 		return nil, 0, fmt.Errorf("[%s] 第%d页搜索请求失败: %w", p.Name(), page, err)
 	}
 	defer resp.Body.Close()
 	
+	debugPrintf("✅ [Fox4k DEBUG] HTTP请求成功 (耗时: %v)\n", requestDuration)
+	
 	// 6. 检查状态码
+	debugPrintf("🔧 [Fox4k DEBUG] HTTP响应状态码: %d\n", resp.StatusCode)
 	if resp.StatusCode != 200 {
+		debugPrintf("❌ [Fox4k DEBUG] 状态码异常: %d\n", resp.StatusCode)
 		return nil, 0, fmt.Errorf("[%s] 第%d页请求返回状态码: %d", p.Name(), page, resp.StatusCode)
 	}
 	
-	// 7. 解析HTML响应
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	// 7. 读取并打印HTML响应
+	htmlBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("[%s] 第%d页读取响应失败: %w", p.Name(), page, err)
+	}
+	
+	htmlContent := string(htmlBytes)
+	debugPrintf("🔧 [Fox4k DEBUG] 第%d页 HTML长度: %d bytes\n", page, len(htmlContent))
+	
+	// 保存HTML到文件（仅在调试模式下）
+	if DebugMode {
+		htmlDir := "./html"
+		os.MkdirAll(htmlDir, 0755)
+		
+		filename := fmt.Sprintf("fox4k_page_%d_%s.html", page, strings.ReplaceAll(encodedKeyword, "%", "_"))
+		filepath := filepath.Join(htmlDir, filename)
+		
+		err = os.WriteFile(filepath, htmlBytes, 0644)
+		if err != nil {
+			debugPrintf("❌ [Fox4k DEBUG] 保存HTML文件失败: %v\n", err)
+		} else {
+			debugPrintf("✅ [Fox4k DEBUG] HTML已保存到: %s\n", filepath)
+		}
+	}
+	
+	// 解析HTML响应
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
 	if err != nil {
 		return nil, 0, fmt.Errorf("[%s] 第%d页HTML解析失败: %w", p.Name(), page, err)
 	}
@@ -336,7 +499,7 @@ func (p *Fox4kPlugin) parseSearchResultItem(s *goquery.Selection) *model.SearchR
 	
 	// 补全URL
 	if strings.HasPrefix(href, "/") {
-		href = "https://www.4kfox.com" + href
+		href = BaseURL + href
 	}
 	
 	// 提取ID
@@ -357,7 +520,7 @@ func (p *Fox4kPlugin) parseSearchResultItem(s *goquery.Selection) *model.SearchR
 	imgElement := s.Find(".hl-item-thumb")
 	imageURL, _ := imgElement.Attr("data-original")
 	if imageURL != "" && strings.HasPrefix(imageURL, "/") {
-		imageURL = "https://www.4kfox.com" + imageURL
+		imageURL = BaseURL + imageURL
 	}
 	
 	// 获取资源状态
@@ -542,7 +705,7 @@ func (p *Fox4kPlugin) getDetailInfo(id string, client *http.Client) *detailPageR
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Referer", "https://www.4kfox.com/")
+	req.Header.Set("Referer", BaseURL+"/")
 	
 	// 发送请求
 	resp, err := client.Do(req)
@@ -575,7 +738,7 @@ func (p *Fox4kPlugin) getDetailInfo(id string, client *http.Client) *detailPageR
 	imgElement := doc.Find(".hl-dc-pic .hl-item-thumb")
 	if imageURL, exists := imgElement.Attr("data-original"); exists && imageURL != "" {
 		if strings.HasPrefix(imageURL, "/") {
-			imageURL = "https://www.4kfox.com" + imageURL
+			imageURL = BaseURL + imageURL
 		}
 		detail.ImageURL = imageURL
 	}
@@ -829,26 +992,86 @@ func (p *Fox4kPlugin) doRequestWithRetry(req *http.Request, client *http.Client)
 	maxRetries := 3
 	var lastErr error
 	
+	debugPrintf("🔄 [Fox4k DEBUG] 开始重试机制 - 最大重试次数: %d\n", maxRetries)
+	
 	for i := 0; i < maxRetries; i++ {
+		debugPrintf("🔄 [Fox4k DEBUG] 第 %d/%d 次尝试\n", i+1, maxRetries)
+		
 		if i > 0 {
 			// 指数退避重试
 			backoff := time.Duration(1<<uint(i-1)) * 200 * time.Millisecond
+			debugPrintf("⏳ [Fox4k DEBUG] 等待 %v 后重试\n", backoff)
 			time.Sleep(backoff)
 		}
 		
 		// 克隆请求避免并发问题
 		reqClone := req.Clone(req.Context())
 		
+		attemptStart := time.Now()
 		resp, err := client.Do(reqClone)
-		if err == nil && resp.StatusCode == 200 {
+		attemptDuration := time.Since(attemptStart)
+		
+		debugPrintf("🔧 [Fox4k DEBUG] 第 %d 次尝试耗时: %v\n", i+1, attemptDuration)
+		
+		if err != nil {
+			debugPrintf("❌ [Fox4k DEBUG] 第 %d 次尝试失败: %v\n", i+1, err)
+			lastErr = err
+			continue
+		}
+		
+		debugPrintf("🔧 [Fox4k DEBUG] 第 %d 次尝试获得响应 - 状态码: %d\n", i+1, resp.StatusCode)
+		
+		if resp.StatusCode == 200 {
+			debugPrintf("✅ [Fox4k DEBUG] 第 %d 次尝试成功!\n", i+1)
 			return resp, nil
 		}
 		
-		if resp != nil {
+		debugPrintf("❌ [Fox4k DEBUG] 第 %d 次尝试状态码异常: %d\n", i+1, resp.StatusCode)
+		
+		// 读取响应体以便调试
+		if resp.Body != nil {
+			bodyBytes, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			if readErr == nil && len(bodyBytes) > 0 {
+				bodyPreview := string(bodyBytes)
+				if len(bodyPreview) > 200 {
+					bodyPreview = bodyPreview[:200] + "..."
+				}
+				debugPrintf("🔧 [Fox4k DEBUG] 响应体预览: %s\n", bodyPreview)
+			}
 		}
-		lastErr = err
+		
+		lastErr = fmt.Errorf("状态码 %d", resp.StatusCode)
 	}
 	
+	debugPrintf("❌ [Fox4k DEBUG] 所有重试都失败了!\n")
 	return nil, fmt.Errorf("重试 %d 次后仍然失败: %w", maxRetries, lastErr)
+}
+
+// getRandomUA 获取随机User-Agent
+func getRandomUA() string {
+	userAgents := []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+	}
+	return userAgents[rand.Intn(len(userAgents))]
+}
+
+// generateRandomIP 生成随机IP地址
+func generateRandomIP() string {
+	// 生成随机的私有IP地址段
+	segments := [][]int{
+		{192, 168, rand.Intn(256), rand.Intn(256)},
+		{10, rand.Intn(256), rand.Intn(256), rand.Intn(256)},
+		{172, 16 + rand.Intn(16), rand.Intn(256), rand.Intn(256)},
+	}
+	
+	segment := segments[rand.Intn(len(segments))]
+	return fmt.Sprintf("%d.%d.%d.%d", segment[0], segment[1], segment[2], segment[3])
 }

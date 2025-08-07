@@ -77,12 +77,8 @@ func (c *EnhancedTwoLevelCache) SetBothLevels(key string, data []byte, ttl time.
 	// 同步更新内存缓存
 	c.memory.SetWithTimestamp(key, data, ttl, now)
 	
-	// 异步更新磁盘缓存
-	go func(k string, d []byte, t time.Duration) {
-		_ = c.disk.Set(k, d, t)
-	}(key, data, ttl)
-	
-	return nil
+	// 同步更新磁盘缓存（确保数据持久化）
+	return c.disk.Set(key, data, ttl)
 }
 
 // SetWithFinalFlag 根据结果状态选择更新策略
@@ -146,4 +142,24 @@ func (c *EnhancedTwoLevelCache) GetSerializer() Serializer {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 	return c.serializer
+}
+
+// FlushMemoryToDisk 将内存中的所有缓存项同步到磁盘
+func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	
+	// 获取所有内存缓存项
+	items := c.memory.GetAllItems()
+	
+	if len(items) == 0 {
+		return
+	}
+	
+	for key, item := range items {
+		ttl := time.Until(item.Expiry)
+		if ttl > 0 {
+			_ = c.disk.Set(key, item.Data, ttl)
+		}
+	}
 } 

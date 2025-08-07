@@ -205,12 +205,11 @@ func NewSearchService(pluginManager *plugin.PluginManager) *SearchService {
 	// 将主缓存注入到异步插件中
 	injectMainCacheToAsyncPlugins(pluginManager, enhancedTwoLevelCache)
 	
-	// 🔗 确保缓存写入管理器设置了主缓存更新函数
+	// 确保缓存写入管理器设置了主缓存更新函数
 	if globalCacheWriteManager != nil && enhancedTwoLevelCache != nil {
 		globalCacheWriteManager.SetMainCacheUpdater(func(key string, data []byte, ttl time.Duration) error {
 			return enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
 		})
-		fmt.Println("✅ 主缓存更新函数已设置 (在SearchService中)")
 	}
 
 	return &SearchService{
@@ -1286,16 +1285,12 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			if enhancedTwoLevelCache != nil {
 				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
 				if err != nil {
-					fmt.Printf("❌ [主程序] 缓存序列化失败: %s | 错误: %v\n", key, err)
 					return
 				}
 				
-				// 主程序最后更新，覆盖可能有问题的异步插件缓存
-				enhancedTwoLevelCache.Set(key, data, ttl)
-				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d", 
-						key, len(res))
-				}
+				// 主程序最后更新，覆盖可能有问题的异步插件缓存（同步写入确保持久化）
+				enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
+
 			}
 		}(allResults, keyword, cacheKey)
 	}

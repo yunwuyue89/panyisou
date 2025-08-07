@@ -74,20 +74,19 @@ func initApp() {
 	if err := globalCacheWriteManager.Initialize(); err != nil {
 		log.Fatalf("缓存写入管理器初始化失败: %v", err)
 	}
-	fmt.Println("✅ 缓存写入管理器已初始化")
-
-	// 🔗 将缓存写入管理器注入到service包
+	// 将缓存写入管理器注入到service包
 	service.SetGlobalCacheWriteManager(globalCacheWriteManager)
 
-	// 🔗 设置缓存写入管理器的主缓存更新函数
-	if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
-		globalCacheWriteManager.SetMainCacheUpdater(func(key string, data []byte, ttl time.Duration) error {
-			return mainCache.SetBothLevels(key, data, ttl)
-		})
-		fmt.Println("✅ 主缓存更新函数已设置")
-	} else {
-		fmt.Println("⚠️  主缓存实例不可用，稍后将重试设置")
-	}
+	// 延迟设置主缓存更新函数，确保service初始化完成
+	go func() {
+		// 等待一小段时间确保service包完全初始化
+		time.Sleep(100 * time.Millisecond)
+		if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
+			globalCacheWriteManager.SetMainCacheUpdater(func(key string, data []byte, ttl time.Duration) error {
+				return mainCache.SetBothLevels(key, data, ttl)
+			})
+		}
+	}()
 
 	// 确保异步插件系统初始化
 	plugin.InitAsyncPluginSystem()
@@ -167,6 +166,11 @@ func startServer() {
 		} else {
 			fmt.Println("✅ 缓存数据已安全保存")
 		}
+	}
+
+	// 强制同步内存缓存到磁盘
+	if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
+		mainCache.FlushMemoryToDisk()
 	}
 
 	// 设置关闭超时时间

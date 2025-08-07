@@ -348,3 +348,32 @@ func (c *ShardedMemoryCache) getDiskCacheReference() *ShardedDiskCache {
 	defer c.diskCacheMutex.RUnlock()
 	return c.diskCache
 }
+
+// MemoryCacheItem 内存缓存项
+type MemoryCacheItem struct {
+	Data   []byte
+	Expiry time.Time
+}
+
+// GetAllItems 获取所有未过期的缓存项
+func (c *ShardedMemoryCache) GetAllItems() map[string]*MemoryCacheItem {
+	result := make(map[string]*MemoryCacheItem)
+	now := time.Now()
+	
+	for _, shard := range c.shards {
+		shard.mutex.RLock()
+		
+		for key, item := range shard.items {
+			if item.expiry.After(now) {
+				result[key] = &MemoryCacheItem{
+					Data:   item.data,
+					Expiry: item.expiry,
+				}
+			}
+		}
+		
+		shard.mutex.RUnlock()
+	}
+	
+	return result
+}

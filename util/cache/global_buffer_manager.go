@@ -116,10 +116,9 @@ type GlobalBufferStats struct {
 
 // NewGlobalBufferManager 创建全局缓冲区管理器
 func NewGlobalBufferManager(strategy GlobalBufferStrategy) *GlobalBufferManager {
-	// 高并发优化：强制使用插件策略，避免缓冲区爆炸
+	// 高并发优化：静默使用插件策略，避免缓冲区爆炸
 	if strategy == BufferHybrid {
 		strategy = BufferByPlugin
-		fmt.Printf("⚠️ [缓冲区优化] 检测到混合策略，自动切换为插件策略以支持高并发\n")
 	}
 	
 	manager := &GlobalBufferManager{
@@ -154,7 +153,7 @@ func (g *GlobalBufferManager) Initialize() error {
 	// 启动状态监控
 	go g.statusMonitor.Start(g)
 	
-	fmt.Printf("🚀 [全局缓冲区管理器] 初始化完成，策略: %s\n", g.strategy)
+	// 初始化完成（静默）
 	return nil
 }
 
@@ -450,8 +449,7 @@ func (g *GlobalBufferManager) Shutdown() error {
 		totalOperations += len(ops)
 	}
 	
-	fmt.Printf("🔄 [全局缓冲区管理器] 关闭完成，刷新%d个缓冲区，%d个操作\n", 
-		len(flushedBuffers), totalOperations)
+
 	
 	return nil
 }

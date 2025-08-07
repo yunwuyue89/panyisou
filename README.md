@@ -102,10 +102,10 @@ cd pansou
 | CACHE_MAX_SIZE | 最大缓存大小(MB) | `100` |
 | PLUGIN_TIMEOUT | 插件超时时间(秒) | `30` |
 | ASYNC_RESPONSE_TIMEOUT | 快速响应超时(秒) | `4` |
-| ASYNC_LOG_ENABLED** | 异步插件详细日志 | `true` | 
+| ASYNC_LOG_ENABLED | 异步插件详细日志 | `true` | 
 | CACHE_PATH | 缓存文件路径 | `./cache` |
 | SHARD_COUNT | 缓存分片数量 | `8` |
-| CACHE_WRITE_STRATEGY | 缓存写入策略 | `hybrid` |
+| CACHE_WRITE_STRATEGY | 缓存写入策略(immediate/hybrid) | `hybrid` |
 | ENABLE_COMPRESSION | 是否启用压缩 | `false` |
 | MIN_SIZE_TO_COMPRESS | 最小压缩阈值(字节) | `1024` |
 | GC_PERCENT | Go GC触发百分比 | `100` |

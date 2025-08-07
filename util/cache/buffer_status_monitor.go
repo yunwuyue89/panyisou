@@ -301,7 +301,7 @@ func (b *BufferStatusMonitor) Start(globalManager *GlobalBufferManager) {
 		return // 已经在监控中
 	}
 	
-	fmt.Printf("🔍 [缓冲区状态监控器] 启动监控，间隔: %v\n", b.monitorInterval)
+	// 状态监控器启动（静默）
 	
 	go b.monitoringLoop(globalManager)
 	go b.healthCheckLoop()

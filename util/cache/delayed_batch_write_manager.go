@@ -366,7 +366,7 @@ func (m *DelayedBatchWriteManager) Initialize() error {
 	// 🔍 启动全局缓冲区监控
 	go m.globalBufferMonitor()
 	
-	fmt.Printf("🚀 [缓存写入管理器] 初始化完成，策略: %s\n", m.strategy)
+	fmt.Printf("缓存写入策略: %s\n", m.strategy)
 	return nil
 }
 
@@ -605,7 +605,7 @@ func (m *DelayedBatchWriteManager) Shutdown(timeout time.Duration) error {
 		return nil // 已经关闭
 	}
 	
-	fmt.Println("🔄 [缓存写入管理器] 正在保存缓存数据...")
+	// 正在保存缓存数据（静默）
 	
 	// 关闭后台处理器
 	close(m.shutdownChan)
@@ -641,7 +641,7 @@ func (m *DelayedBatchWriteManager) Shutdown(timeout time.Duration) error {
 		if err != nil {
 			return fmt.Errorf("数据保存失败: %v", err)
 		}
-		fmt.Println("✅ [缓存写入管理器] 缓存数据已安全保存")
+		// 缓存数据已安全保存（静默）
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("数据保存超时")
