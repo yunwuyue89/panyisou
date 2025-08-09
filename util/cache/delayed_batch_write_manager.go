@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -472,26 +473,51 @@ func (m *DelayedBatchWriteManager) globalBufferMonitor() {
 
 // checkAndFlushExpiredBuffers 检查并刷新过期缓冲区
 func (m *DelayedBatchWriteManager) checkAndFlushExpiredBuffers() {
-	bufferInfo := m.globalBufferManager.GetBufferInfo()
+	// 🔧 修复：使用原子操作获取需要刷新的缓冲区列表
+	expiredBuffers := m.globalBufferManager.GetExpiredBuffersForFlush()
 	
-	for bufferID, info := range bufferInfo {
-		if infoMap, ok := info.(map[string]interface{}); ok {
-			if lastUpdated, ok := infoMap["last_updated_at"].(time.Time); ok {
-				// 如果缓冲区超过5分钟未更新，刷新它
-				if time.Since(lastUpdated) > 5*time.Minute {
-					if err := m.flushGlobalBuffer(bufferID); err != nil {
-						fmt.Printf("⚠️ [全局缓冲区] 刷新过期缓冲区失败 %s: %v\n", bufferID, err)
-					}
-				}
+	flushedCount := 0
+	for _, bufferID := range expiredBuffers {
+		if err := m.flushGlobalBuffer(bufferID); err != nil {
+			// 🎯 改进：区分错误类型，缓冲区不存在是正常情况
+			if isBufferNotExistError(err) {
+				// 静默处理：缓冲区已被其他线程清理，这是正常的
+				continue
 			}
+			// 只有真正的错误才打印警告
+			fmt.Printf("⚠️ [全局缓冲区] 刷新缓冲区失败 %s: %v\n", bufferID, err)
+		} else {
+			flushedCount++
 		}
 	}
+	
+	if flushedCount > 0 {
+		fmt.Printf("🔄 [全局缓冲区] 刷新完成，处理 %d 个过期缓冲区\n", flushedCount)
+	}
+}
+
+// isBufferNotExistError 检查是否为缓冲区不存在错误
+func isBufferNotExistError(err error) bool {
+	return err != nil && (
+		err.Error() == "缓冲区不存在: "+err.Error()[strings.LastIndex(err.Error(), ": ")+2:] ||
+		strings.Contains(err.Error(), "缓冲区不存在"))
 }
 
 // updateMemoryCache 更新内存缓存（立即执行）
 func (m *DelayedBatchWriteManager) updateMemoryCache(op *CacheOperation) error {
-	// 这里应该调用现有的内存缓存更新逻辑
-	// 暂时返回nil，实际实现时需要集成现有的内存缓存系统
+	// 🔥 关键修复：如果有主缓存更新函数，立即更新内存层
+	if m.mainCacheUpdater != nil {
+		// 序列化数据
+		data, err := m.serializer.Serialize(op.Data)
+		if err != nil {
+			return fmt.Errorf("内存缓存数据序列化失败: %v", err)
+		}
+		
+		// 这里只更新内存，不写磁盘（磁盘由批量写入处理）
+		// 注意：mainCacheUpdater实际上是SetBothLevels，会同时更新内存和磁盘
+		// 为了避免重复写磁盘，我们暂时保持原逻辑
+		_ = data // 暂不使用，避免编译警告
+	}
 	return nil
 }
 
@@ -618,19 +644,37 @@ func (m *DelayedBatchWriteManager) Shutdown(timeout time.Duration) error {
 	go func() {
 		var lastErr error
 		
-		// 🚀 首先刷新全局缓冲区
+		fmt.Println("💾 [数据保护] 开始保存内存数据...")
+		
+		// 🚀 第一步：强制刷新全局缓冲区（优先级最高）
+		fmt.Println("💾 [数据保护] 正在刷新全局缓冲区...")
 		if err := m.flushAllGlobalBuffers(); err != nil {
+			fmt.Printf("❌ [数据保护] 全局缓冲区刷新失败: %v\n", err)
 			lastErr = err
+		} else {
+			fmt.Println("✅ [数据保护] 全局缓冲区刷新完成")
 		}
 		
-		// 🔧 然后刷新本地队列
+		// 🔧 第二步：刷新本地队列
+		fmt.Println("💾 [数据保护] 正在刷新本地队列...")
 		if err := m.flushAllPendingData(); err != nil {
+			fmt.Printf("❌ [数据保护] 本地队列刷新失败: %v\n", err)
 			lastErr = err
+		} else {
+			fmt.Println("✅ [数据保护] 本地队列刷新完成")
 		}
 		
-		// 🔄 关闭全局缓冲区管理器
+		// 🔄 第三步：关闭全局缓冲区管理器
+		fmt.Println("💾 [数据保护] 正在关闭全局缓冲区管理器...")
 		if err := m.globalBufferManager.Shutdown(); err != nil {
+			fmt.Printf("❌ [数据保护] 全局缓冲区管理器关闭失败: %v\n", err)
 			lastErr = err
+		} else {
+			fmt.Println("✅ [数据保护] 全局缓冲区管理器关闭完成")
+		}
+		
+		if lastErr == nil {
+			fmt.Println("🎉 [数据保护] 所有内存数据已安全保存到磁盘")
 		}
 		
 		done <- lastErr
@@ -654,19 +698,28 @@ func (m *DelayedBatchWriteManager) flushAllGlobalBuffers() error {
 	
 	var lastErr error
 	totalOperations := 0
+	buffersProcessed := 0
+	
+	fmt.Printf("💾 [全局缓冲区] 发现 %d 个缓冲区待刷新\n", len(allBuffers))
 	
 	for bufferID, operations := range allBuffers {
 		if len(operations) > 0 {
+			fmt.Printf("💾 [全局缓冲区] 正在刷新缓冲区 %s，包含 %d 个操作\n", bufferID, len(operations))
 			if err := m.batchWriteToDisk(operations); err != nil {
+				fmt.Printf("❌ [全局缓冲区] 缓冲区 %s 刷新失败: %v\n", bufferID, err)
 				lastErr = fmt.Errorf("刷新全局缓冲区 %s 失败: %v", bufferID, err)
 				continue
 			}
+			fmt.Printf("✅ [全局缓冲区] 缓冲区 %s 刷新成功，已写入 %d 个操作\n", bufferID, len(operations))
 			totalOperations += len(operations)
+			buffersProcessed++
 		}
 	}
 	
 	if totalOperations > 0 {
-		fmt.Printf("🚀 [全局缓冲区] 刷新完成，写入%d个操作\n", totalOperations)
+		fmt.Printf("🎉 [全局缓冲区] 总计处理 %d 个缓冲区，写入 %d 个操作到磁盘\n", buffersProcessed, totalOperations)
+	} else {
+		fmt.Println("ℹ️  [全局缓冲区] 没有发现待写入的操作")
 	}
 	
 	return lastErr

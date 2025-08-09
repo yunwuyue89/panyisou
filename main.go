@@ -158,19 +158,25 @@ func startServer() {
 	fmt.Println("正在关闭服务器...")
 
 	// 🔥 优先保存缓存数据到磁盘（数据安全第一）
-	fmt.Println("正在保存缓存数据...")
+	fmt.Println("💾 正在保存所有缓存数据...")
+	
+	// 增加关闭超时时间，确保数据有足够时间保存
+	shutdownTimeout := 10 * time.Second
+	
 	if globalCacheWriteManager != nil {
-		shutdownTimeout := 3 * time.Second
 		if err := globalCacheWriteManager.Shutdown(shutdownTimeout); err != nil {
-			log.Printf("⚠️  缓存数据保存失败: %v", err)
-		} else {
-			fmt.Println("✅ 缓存数据已安全保存")
+			log.Printf("❌ 缓存数据保存失败: %v", err)
 		}
 	}
-
-	// 强制同步内存缓存到磁盘
+	
+	// 额外确保内存缓存也被保存（双重保障）
 	if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
-		mainCache.FlushMemoryToDisk()
+		fmt.Println("💾 正在强制同步内存缓存到磁盘...")
+		if err := mainCache.FlushMemoryToDisk(); err != nil {
+			log.Printf("❌ 内存缓存同步失败: %v", err)
+		} else {
+			fmt.Println("✅ 内存缓存同步完成")
+		}
 	}
 
 	// 设置关闭超时时间

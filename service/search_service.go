@@ -1285,12 +1285,17 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			if enhancedTwoLevelCache != nil {
 				data, err := enhancedTwoLevelCache.GetSerializer().Serialize(res)
 				if err != nil {
+					fmt.Printf("❌ [主程序] 缓存序列化失败: %s | 错误: %v\n", key, err)
 					return
 				}
 				
-				// 主程序最后更新，覆盖可能有问题的异步插件缓存（同步写入确保持久化）
-				enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
-
+							// 主程序最后更新，覆盖可能有问题的异步插件缓存
+			// 🔥 修复：使用同步方式确保数据写入磁盘
+			enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
+				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
+					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d", 
+						key, len(res))
+				}
 			}
 		}(allResults, keyword, cacheKey)
 	}

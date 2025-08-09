@@ -393,8 +393,8 @@ func (g *GlobalBufferManager) performCleanup() {
 	for id, buffer := range g.buffers {
 		buffer.mutex.RLock()
 		
-		// 清理条件：空缓冲区且超过5分钟未活动
-		if len(buffer.Operations) == 0 && now.Sub(buffer.LastUpdatedAt) > 5*time.Minute {
+		// 清理条件：空缓冲区且超过6分钟未活动（避免与监控冲突）
+		if len(buffer.Operations) == 0 && now.Sub(buffer.LastUpdatedAt) > 6*time.Minute {
 			toDelete = append(toDelete, id)
 		}
 		
@@ -449,7 +449,8 @@ func (g *GlobalBufferManager) Shutdown() error {
 		totalOperations += len(ops)
 	}
 	
-
+	fmt.Printf("🔄 [全局缓冲区管理器] 关闭完成，刷新%d个缓冲区，%d个操作\n", 
+		len(flushedBuffers), totalOperations)
 	
 	return nil
 }
@@ -499,4 +500,29 @@ func (g *GlobalBufferManager) GetBufferInfo() map[string]interface{} {
 	}
 	
 	return info
+}
+
+// GetExpiredBuffersForFlush 原子地获取需要刷新的过期缓冲区列表
+func (g *GlobalBufferManager) GetExpiredBuffersForFlush() []string {
+	g.buffersMutex.RLock()
+	defer g.buffersMutex.RUnlock()
+	
+	now := time.Now()
+	expiredBuffers := make([]string, 0, 10) // 🚀 预分配容量，减少内存重分配
+	
+	for id, buffer := range g.buffers {
+		// 🎯 快速预检查：先检查时间，减少锁竞争
+		if now.Sub(buffer.LastUpdatedAt) <= 4*time.Minute {
+			continue // 跳过未过期的缓冲区
+		}
+		
+		buffer.mutex.RLock()
+		// 双重检查：确保在锁保护下再次验证
+		if now.Sub(buffer.LastUpdatedAt) > 4*time.Minute && len(buffer.Operations) > 0 {
+			expiredBuffers = append(expiredBuffers, id)
+		}
+		buffer.mutex.RUnlock()
+	}
+	
+	return expiredBuffers
 }

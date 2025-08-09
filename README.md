@@ -36,7 +36,7 @@ docker run -d --name pansou -p 80:80 ghcr.io/fish2018/pansou-web
 ##### 使用Docker Compose（推荐）
 ```
 # 下载配置文件
-curl -o docker-compose.yml https://raw.githubusercontent.com/fish2018/pansou-web/main/docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/fish2018/pansou-web/refs/heads/main/docker-compose.yml
 
 # 启动服务
 docker-compose up -d
@@ -57,7 +57,7 @@ docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache -e CHANNELS=
 
 ```bash
 # 下载配置文件
-curl -o docker-compose.yml  https://raw.githubusercontent.com/fish2018/pansou/main/docker-compose.yml
+curl -o docker-compose.yml  https://raw.githubusercontent.com/fish2018/pansou/refs/heads/main/docker-compose.yml
 
 # 启动服务
 docker-compose up -d

@@ -349,29 +349,40 @@ func (c *ShardedMemoryCache) getDiskCacheReference() *ShardedDiskCache {
 	return c.diskCache
 }
 
-// MemoryCacheItem 内存缓存项
+// MemoryCacheItem 内存缓存项结构（用于导出）
 type MemoryCacheItem struct {
-	Data   []byte
-	Expiry time.Time
+	Data []byte
+	TTL  time.Duration
 }
 
-// GetAllItems 获取所有未过期的缓存项
+// GetAllItems 获取内存缓存中的所有项
 func (c *ShardedMemoryCache) GetAllItems() map[string]*MemoryCacheItem {
 	result := make(map[string]*MemoryCacheItem)
 	now := time.Now()
 	
+	// 遍历所有分片
 	for _, shard := range c.shards {
 		shard.mutex.RLock()
-		
 		for key, item := range shard.items {
-			if item.expiry.After(now) {
-				result[key] = &MemoryCacheItem{
-					Data:   item.data,
-					Expiry: item.expiry,
+			// 检查是否过期
+			if !item.expiry.IsZero() && now.After(item.expiry) {
+				continue // 跳过过期项
+			}
+			
+			// 计算剩余TTL
+			var ttl time.Duration
+			if !item.expiry.IsZero() {
+				ttl = item.expiry.Sub(now)
+				if ttl <= 0 {
+					continue // 跳过即将过期的项
 				}
 			}
+			
+			result[key] = &MemoryCacheItem{
+				Data: item.data,
+				TTL:  ttl,
+			}
 		}
-		
 		shard.mutex.RUnlock()
 	}
 	

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ func (c *EnhancedTwoLevelCache) SetBothLevels(key string, data []byte, ttl time.
 	// 同步更新内存缓存
 	c.memory.SetWithTimestamp(key, data, ttl, now)
 	
-	// 同步更新磁盘缓存（确保数据持久化）
+	// 🔥 修复：同步更新磁盘缓存，确保数据立即写入
 	return c.disk.Set(key, data, ttl)
 }
 
@@ -144,22 +145,31 @@ func (c *EnhancedTwoLevelCache) GetSerializer() Serializer {
 	return c.serializer
 }
 
-// FlushMemoryToDisk 将内存中的所有缓存项同步到磁盘
-func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+// FlushMemoryToDisk 将内存缓存中的所有数据刷新到磁盘
+func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() error {
+	// 获取内存缓存中的所有键值对
+	allItems := c.memory.GetAllItems()
 	
-	// 获取所有内存缓存项
-	items := c.memory.GetAllItems()
+	var lastErr error
+	savedCount := 0
 	
-	if len(items) == 0 {
-		return
-	}
+	fmt.Printf("💾 [内存同步] 发现 %d 个内存缓存项需要同步到磁盘\n", len(allItems))
 	
-	for key, item := range items {
-		ttl := time.Until(item.Expiry)
-		if ttl > 0 {
-			_ = c.disk.Set(key, item.Data, ttl)
+	for key, item := range allItems {
+		// 同步写入到磁盘缓存
+		if err := c.disk.Set(key, item.Data, item.TTL); err != nil {
+			fmt.Printf("❌ [内存同步] 同步失败: %s -> %v\n", key, err)
+			lastErr = err
+			continue
 		}
+		savedCount++
 	}
+	
+	if savedCount > 0 {
+		fmt.Printf("✅ [内存同步] 成功同步 %d 个缓存项到磁盘\n", savedCount)
+	} else {
+		fmt.Println("ℹ️  [内存同步] 没有发现需要同步的数据")
+	}
+	
+	return lastErr
 } 
