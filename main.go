@@ -24,26 +24,27 @@ import (
 
 	// 以下是插件的空导入，用于触发各插件的init函数，实现自动注册
 	// 添加新插件时，只需在此处添加对应的导入语句即可
-	_ "pansou/plugin/duoduo"
-	_ "pansou/plugin/fox4k"
 	_ "pansou/plugin/hdr4k"
-	_ "pansou/plugin/huban"
 	_ "pansou/plugin/hunhepan"
 	_ "pansou/plugin/jikepan"
-	_ "pansou/plugin/labi"
-	_ "pansou/plugin/muou"
-	_ "pansou/plugin/ouge"
 	_ "pansou/plugin/pan666"
 	_ "pansou/plugin/pansearch"
 	_ "pansou/plugin/panta"
-	_ "pansou/plugin/panyq"
 	_ "pansou/plugin/qupansou"
-	_ "pansou/plugin/shandian"
 	_ "pansou/plugin/susu"
+	_ "pansou/plugin/thepiratebay"
 	_ "pansou/plugin/wanou"
 	_ "pansou/plugin/xuexizhinan"
+	_ "pansou/plugin/panyq"
 	_ "pansou/plugin/zhizhen"
-	_ "pansou/plugin/thepiratebay"
+	_ "pansou/plugin/labi"
+	_ "pansou/plugin/muou"
+	_ "pansou/plugin/ouge"
+	_ "pansou/plugin/shandian"
+	_ "pansou/plugin/duoduo"
+	_ "pansou/plugin/huban"
+	_ "pansou/plugin/fox4k"
+	_ "pansou/plugin/cyg"
 )
 
 // 全局缓存写入管理器

@@ -50,7 +50,7 @@ docker-compose logs -f
 ##### 直接使用Docker命令
 
 ```bash
-docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache -e CHANNELS="tgsearchers2,xxx" ghcr.io/fish2018/pansou:latest
+docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache -e CHANNELS="tgsearchers3,xxx" ghcr.io/fish2018/pansou:latest
 ```
 
 ##### 使用Docker Compose（推荐）
@@ -88,7 +88,7 @@ cd pansou
 |----------|------|--------|------|
 | **PORT** | 服务端口 | `8888` | 修改服务监听端口 |
 | **PROXY** | SOCKS5代理 | 无 | 如：`socks5://127.0.0.1:1080` |
-| **CHANNELS** | 默认搜索的TG频道 | `tgsearchers2` | 多个频道用逗号分隔 |
+| **CHANNELS** | 默认搜索的TG频道 | `tgsearchers3` | 多个频道用逗号分隔 |
 
 #### 🔧 高级配置（默认值即可）
 
@@ -138,7 +138,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -extldflags '-sta
 
 ```
 [program:pansou]
-environment=PORT=8888,CHANNELS="tgsearchers2,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,bdwpzhpd,ysxb48,jdjdn1111,yggpan,MCPH086,zaihuayun,Q66Share,NewAliPan,ypquark,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,leoziyuan"
+environment=PORT=8888,CHANNELS="tgsearchers3,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,bdwpzhpd,ysxb48,jdjdn1111,yggpan,MCPH086,zaihuayun,Q66Share,NewAliPan,ypquark,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,leoziyuan"
 command=/home/work/pansou/pansou
 directory=/home/work/pansou
 autostart=true
@@ -243,7 +243,7 @@ server {
 ```json
 {
   "kw": "速度与激情",
-  "channels": ["tgsearchers2", "xxx"],
+  "channels": ["tgsearchers3", "xxx"],
   "conc": 2,
   "refresh": true,
   "res": "merge",
@@ -260,7 +260,7 @@ server {
 **GET请求示例**：
 
 ```
-GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true&res=merge&src=tg&cloud_types=baidu,quark&ext={"title_en":"Fast and Furious","is_all":true}
+GET /api/search?kw=速度与激情&channels=tgsearchers3,xxx&conc=2&refresh=true&res=merge&src=tg&cloud_types=baidu,quark&ext={"title_en":"Fast and Furious","is_all":true}
 ```
 
 **成功响应**：
@@ -272,7 +272,7 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
     {
       "message_id": "12345",
       "unique_id": "channel-12345",
-      "channel": "tgsearchers2",
+      "channel": "tgsearchers3",
       "datetime": "2023-06-10T14:23:45Z",
       "title": "速度与激情全集1-10",
       "content": "速度与激情系列全集，1080P高清...",
@@ -353,7 +353,7 @@ GET /api/search?kw=速度与激情&channels=tgsearchers2,xxx&conc=2&refresh=true
 ```json
 {
   "channels": [
-    "tgsearchers2"
+    "tgsearchers3"
   ],
   "plugin_count": 16,
   "plugins": [

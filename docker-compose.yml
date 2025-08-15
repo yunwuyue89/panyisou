@@ -9,7 +9,7 @@ services:
       - "8888:8888"
     environment:
       - PORT=8888
-      - CHANNELS=tgsearchers2,SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk
+      - CHANNELS=tgsearchers3,SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk
       - CACHE_ENABLED=true
       - CACHE_PATH=/app/cache
       - CACHE_MAX_SIZE=100
