@@ -45,6 +45,7 @@ import (
 	_ "pansou/plugin/huban"
 	_ "pansou/plugin/fox4k"
 	_ "pansou/plugin/cyg"
+	_ "pansou/plugin/erxiao"
 )
 
 // 全局缓存写入管理器
