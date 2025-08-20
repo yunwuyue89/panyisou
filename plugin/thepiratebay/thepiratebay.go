@@ -103,7 +103,7 @@ func createOptimizedHTTPClient() *http.Client {
 // NewThePirateBayPlugin 创建新的海盗湾搜索异步插件
 func NewThePirateBayPlugin() *ThePirateBayPlugin {
 	return &ThePirateBayPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPluginWithFilter("thepiratebay", 4, true), // 跳过Service层过滤
+		BaseAsyncPlugin: plugin.NewBaseAsyncPluginWithFilter("thepiratebay", 3, true), // 跳过Service层过滤
 		optimizedClient: createOptimizedHTTPClient(),
 	}
 }

@@ -50,6 +50,7 @@ import (
 	_ "pansou/plugin/pianku"
 	_ "pansou/plugin/clmao"
 	_ "pansou/plugin/wuji"
+	_ "pansou/plugin/cldi"
 )
 
 // 全局缓存写入管理器

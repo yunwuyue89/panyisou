@@ -21,15 +21,16 @@ const (
 	// 基础URL
 	BaseURL = "https://xcili.net"
 	
-	// 搜索URL格式：/search?q={keyword}
-	SearchURL = BaseURL + "/search?q=%s"
+	// 搜索URL格式：/search?q={keyword}&page={page}
+	SearchURL = BaseURL + "/search?q=%s&page=%d"
 	
 	// 默认参数
 	MaxRetries = 3
 	TimeoutSeconds = 30
 	
 	// 并发控制参数
-	MaxConcurrency = 20 // 最大并发数
+	MaxConcurrency = 10 // 最大并发数
+	MaxPages = 5        // 最大搜索页数
 )
 
 // 预编译的正则表达式
@@ -63,7 +64,7 @@ type WujiPlugin struct {
 // NewWujiPlugin 创建新的无极磁链插件实例
 func NewWujiPlugin() *WujiPlugin {
 	return &WujiPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPlugin("wuji", 3),
+		BaseAsyncPlugin: plugin.NewBaseAsyncPluginWithFilter("wuji", 3, true),
 	}
 }
 
@@ -98,9 +99,79 @@ func (p *WujiPlugin) SearchWithResult(keyword string, ext map[string]interface{}
 
 // searchImpl 实际的搜索实现
 func (p *WujiPlugin) searchImpl(client *http.Client, keyword string, ext map[string]interface{}) ([]model.SearchResult, error) {
+	// 1. 首先搜索第一页
+	firstPageResults, err := p.searchPage(client, keyword, 1)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] 搜索第一页失败: %w", p.Name(), err)
+	}
+	
+	// 存储所有结果
+	var allResults []model.SearchResult
+	allResults = append(allResults, firstPageResults...)
+	
+	// 2. 并发搜索其他页面（第2页到第5页）
+	if MaxPages > 1 {
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		
+		// 使用信号量控制并发数
+		semaphore := make(chan struct{}, MaxConcurrency)
+		
+		// 存储每页结果
+		pageResults := make(map[int][]model.SearchResult)
+		
+		for page := 2; page <= MaxPages; page++ {
+			wg.Add(1)
+			go func(pageNum int) {
+				defer wg.Done()
+				
+				// 获取信号量
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+				
+				// 添加小延迟避免过于频繁的请求
+				time.Sleep(time.Duration(pageNum%3) * 100 * time.Millisecond)
+				
+				currentPageResults, err := p.searchPage(client, keyword, pageNum)
+				if err == nil && len(currentPageResults) > 0 {
+					mu.Lock()
+					pageResults[pageNum] = currentPageResults
+					mu.Unlock()
+				}
+			}(page)
+		}
+		
+		wg.Wait()
+		
+		// 按页码顺序合并所有页面的结果
+		for page := 2; page <= MaxPages; page++ {
+			if results, exists := pageResults[page]; exists {
+				allResults = append(allResults, results...)
+			}
+		}
+	}
+	
+	fmt.Printf("[%s] 找到搜索结果数量: %d\n", p.Name(), len(allResults))
+	
+	// 3. 并发获取每个结果的详情页磁力链接
+	finalResults := p.enrichWithMagnetLinks(allResults, client)
+	
+	// 4. 关键词过滤
+	searchKeyword := keyword
+	if searchParam, ok := ext["search"]; ok {
+		if searchStr, ok := searchParam.(string); ok && searchStr != "" {
+			searchKeyword = searchStr
+		}
+	}
+	
+	return plugin.FilterResultsByKeyword(finalResults, searchKeyword), nil
+}
+
+// searchPage 搜索指定页面
+func (p *WujiPlugin) searchPage(client *http.Client, keyword string, page int) ([]model.SearchResult, error) {
 	// URL编码关键词
 	encodedKeyword := url.QueryEscape(keyword)
-	searchURL := fmt.Sprintf(SearchURL, encodedKeyword)
+	searchURL := fmt.Sprintf(SearchURL, encodedKeyword, page)
 	
 	// 创建带超时的上下文
 	ctx, cancel := context.WithTimeout(context.Background(), TimeoutSeconds*time.Second)
@@ -140,20 +211,7 @@ func (p *WujiPlugin) searchImpl(client *http.Client, keyword string, ext map[str
 	}
 	
 	// 提取搜索结果
-	searchResults := p.extractSearchResults(doc)
-	
-	// 并发获取每个结果的详情页磁力链接
-	finalResults := p.enrichWithMagnetLinks(searchResults, client)
-	
-	// 关键词过滤
-	searchKeyword := keyword
-	if searchParam, ok := ext["search"]; ok {
-		if searchStr, ok := searchParam.(string); ok && searchStr != "" {
-			searchKeyword = searchStr
-		}
-	}
-	
-	return plugin.FilterResultsByKeyword(finalResults, searchKeyword), nil
+	return p.extractSearchResults(doc), nil
 }
 
 // extractSearchResults 提取搜索结果
