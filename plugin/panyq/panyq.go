@@ -305,7 +305,7 @@ func (p *PanyqPlugin) doSearch(client *http.Client, keyword string, ext map[stri
 			// 步骤3: 执行中间状态确认
 			err := p.performIntermediateStep(actionIDs[ActionIDKeys[1]], credentials.Hash, credentials.Sha, item.EID, client)
 			if err != nil {
-				fmt.Println("panyq: intermediate step failed for", item.EID, ":", err)
+				// fmt.Println("panyq: intermediate step failed for", item.EID, ":", err)
 				return
 			}
 			

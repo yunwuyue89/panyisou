@@ -174,7 +174,7 @@ func (p *WujiPlugin) extractSearchResults(doc *goquery.Document) []model.SearchR
 // parseSearchResult 解析单个搜索结果
 func (p *WujiPlugin) parseSearchResult(s *goquery.Selection) model.SearchResult {
 	result := model.SearchResult{
-		Channel: p.Name(),
+		Channel:  "", // 插件搜索结果必须为空字符串
 		Datetime: time.Now(),
 	}
 	
@@ -220,7 +220,7 @@ func (p *WujiPlugin) parseSearchResult(s *goquery.Selection) model.SearchResult 
 	}}
 	
 	// 生成唯一ID
-	result.UniqueID = fmt.Sprintf("%s_%d", p.Name(), time.Now().UnixNano())
+	result.UniqueID = fmt.Sprintf("%s-%d", p.Name(), time.Now().UnixNano())
 	
 	// 添加标签
 	result.Tags = []string{"magnet"}

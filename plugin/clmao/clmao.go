@@ -125,13 +125,6 @@ func (p *ClmaoPlugin) searchImpl(client *http.Client, keyword string, ext map[st
 		return nil, fmt.Errorf("[%s] 读取响应失败: %w", p.Name(), err)
 	}
 	
-	// 调试输出前500个字符
-	if len(body) > 500 {
-		fmt.Printf("[%s] 响应内容前500字符: %s\n", p.Name(), string(body[:500]))
-	} else {
-		fmt.Printf("[%s] 完整响应内容: %s\n", p.Name(), string(body))
-	}
-	
 	// 解析HTML
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	if err != nil {
@@ -170,7 +163,7 @@ func (p *ClmaoPlugin) extractSearchResults(doc *goquery.Document) []model.Search
 // parseSearchResult 解析单个搜索结果
 func (p *ClmaoPlugin) parseSearchResult(s *goquery.Selection) model.SearchResult {
 	result := model.SearchResult{
-		Channel: p.Name(),
+		Channel:  "", // 插件搜索结果必须为空字符串
 		Datetime: time.Now(),
 	}
 	
@@ -193,7 +186,7 @@ func (p *ClmaoPlugin) parseSearchResult(s *goquery.Selection) model.SearchResult
 	p.extractFileList(s, &result)
 	
 	// 生成唯一ID
-	result.UniqueID = fmt.Sprintf("%s_%d", p.Name(), time.Now().UnixNano())
+	result.UniqueID = fmt.Sprintf("%s-%d", p.Name(), time.Now().UnixNano())
 	
 	return result
 }
