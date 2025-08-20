@@ -43,10 +43,13 @@ import (
 	_ "pansou/plugin/shandian"
 	_ "pansou/plugin/duoduo"
 	_ "pansou/plugin/huban"
-	_ "pansou/plugin/fox4k"
 	_ "pansou/plugin/cyg"
 	_ "pansou/plugin/erxiao"
 	_ "pansou/plugin/miaoso"
+	_ "pansou/plugin/fox4k"
+	_ "pansou/plugin/pianku"
+	_ "pansou/plugin/clmao"
+	_ "pansou/plugin/wuji"
 )
 
 // 全局缓存写入管理器

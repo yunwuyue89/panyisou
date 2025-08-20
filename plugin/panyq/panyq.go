@@ -312,7 +312,7 @@ func (p *PanyqPlugin) doSearch(client *http.Client, keyword string, ext map[stri
 			// 步骤4: 获取最终链接
 			finalLink, err := p.getFinalLink(actionIDs[ActionIDKeys[2]], item.EID, client)
 			if err != nil {
-				fmt.Println("panyq: get final link failed for", item.EID, ":", err)
+				// fmt.Println("panyq: get final link failed for", item.EID, ":", err)
 				return
 			}
 			
