@@ -35,7 +35,7 @@ const (
 	// 基础URL
 	BaseURL = "https://panyq.com"
 	// 请求来源控制默认为开启状态
-	EnableRefererCheck = true
+	EnableRefererCheck = false
 )
 
 // 动态Action ID的键名

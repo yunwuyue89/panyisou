@@ -27,7 +27,7 @@ const (
 	IdleConnTimeout     = 90 * time.Second
 	
 	// 请求来源控制 - 默认开启，提高安全性
-	EnableRefererCheck = true
+	EnableRefererCheck = false
 	
 	// 调试日志开关
 	DebugLog = false

@@ -151,9 +151,6 @@ func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() error {
 	allItems := c.memory.GetAllItems()
 	
 	var lastErr error
-	savedCount := 0
-	
-	fmt.Printf("💾 [内存同步] 发现 %d 个内存缓存项需要同步到磁盘\n", len(allItems))
 	
 	for key, item := range allItems {
 		// 同步写入到磁盘缓存
@@ -162,13 +159,6 @@ func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() error {
 			lastErr = err
 			continue
 		}
-		savedCount++
-	}
-	
-	if savedCount > 0 {
-		fmt.Printf("✅ [内存同步] 成功同步 %d 个缓存项到磁盘\n", savedCount)
-	} else {
-		fmt.Println("ℹ️  [内存同步] 没有发现需要同步的数据")
 	}
 	
 	return lastErr

@@ -644,38 +644,23 @@ func (m *DelayedBatchWriteManager) Shutdown(timeout time.Duration) error {
 	go func() {
 		var lastErr error
 		
-		fmt.Println("💾 [数据保护] 开始保存内存数据...")
-		
 		// 🚀 第一步：强制刷新全局缓冲区（优先级最高）
-		fmt.Println("💾 [数据保护] 正在刷新全局缓冲区...")
 		if err := m.flushAllGlobalBuffers(); err != nil {
 			fmt.Printf("❌ [数据保护] 全局缓冲区刷新失败: %v\n", err)
 			lastErr = err
-		} else {
-			fmt.Println("✅ [数据保护] 全局缓冲区刷新完成")
-		}
+		} 
 		
 		// 🔧 第二步：刷新本地队列
-		fmt.Println("💾 [数据保护] 正在刷新本地队列...")
 		if err := m.flushAllPendingData(); err != nil {
 			fmt.Printf("❌ [数据保护] 本地队列刷新失败: %v\n", err)
 			lastErr = err
-		} else {
-			fmt.Println("✅ [数据保护] 本地队列刷新完成")
-		}
+		} 
 		
 		// 🔄 第三步：关闭全局缓冲区管理器
-		fmt.Println("💾 [数据保护] 正在关闭全局缓冲区管理器...")
 		if err := m.globalBufferManager.Shutdown(); err != nil {
 			fmt.Printf("❌ [数据保护] 全局缓冲区管理器关闭失败: %v\n", err)
 			lastErr = err
-		} else {
-			fmt.Println("✅ [数据保护] 全局缓冲区管理器关闭完成")
-		}
-		
-		if lastErr == nil {
-			fmt.Println("🎉 [数据保护] 所有内存数据已安全保存到磁盘")
-		}
+		} 
 		
 		done <- lastErr
 	}()
@@ -697,29 +682,15 @@ func (m *DelayedBatchWriteManager) flushAllGlobalBuffers() error {
 	allBuffers := m.globalBufferManager.FlushAllBuffers()
 	
 	var lastErr error
-	totalOperations := 0
-	buffersProcessed := 0
-	
-	fmt.Printf("💾 [全局缓冲区] 发现 %d 个缓冲区待刷新\n", len(allBuffers))
 	
 	for bufferID, operations := range allBuffers {
 		if len(operations) > 0 {
-			fmt.Printf("💾 [全局缓冲区] 正在刷新缓冲区 %s，包含 %d 个操作\n", bufferID, len(operations))
 			if err := m.batchWriteToDisk(operations); err != nil {
 				fmt.Printf("❌ [全局缓冲区] 缓冲区 %s 刷新失败: %v\n", bufferID, err)
 				lastErr = fmt.Errorf("刷新全局缓冲区 %s 失败: %v", bufferID, err)
 				continue
 			}
-			fmt.Printf("✅ [全局缓冲区] 缓冲区 %s 刷新成功，已写入 %d 个操作\n", bufferID, len(operations))
-			totalOperations += len(operations)
-			buffersProcessed++
 		}
-	}
-	
-	if totalOperations > 0 {
-		fmt.Printf("🎉 [全局缓冲区] 总计处理 %d 个缓冲区，写入 %d 个操作到磁盘\n", buffersProcessed, totalOperations)
-	} else {
-		fmt.Println("ℹ️  [全局缓冲区] 没有发现待写入的操作")
 	}
 	
 	return lastErr

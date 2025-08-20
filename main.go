@@ -46,6 +46,7 @@ import (
 	_ "pansou/plugin/fox4k"
 	_ "pansou/plugin/cyg"
 	_ "pansou/plugin/erxiao"
+	_ "pansou/plugin/miaoso"
 )
 
 // 全局缓存写入管理器
@@ -160,8 +161,6 @@ func startServer() {
 	fmt.Println("正在关闭服务器...")
 
 	// 🔥 优先保存缓存数据到磁盘（数据安全第一）
-	fmt.Println("💾 正在保存所有缓存数据...")
-	
 	// 增加关闭超时时间，确保数据有足够时间保存
 	shutdownTimeout := 10 * time.Second
 	
@@ -173,12 +172,9 @@ func startServer() {
 	
 	// 额外确保内存缓存也被保存（双重保障）
 	if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
-		fmt.Println("💾 正在强制同步内存缓存到磁盘...")
 		if err := mainCache.FlushMemoryToDisk(); err != nil {
 			log.Printf("❌ 内存缓存同步失败: %v", err)
-		} else {
-			fmt.Println("✅ 内存缓存同步完成")
-		}
+		} 
 	}
 
 	// 设置关闭超时时间
@@ -190,7 +186,7 @@ func startServer() {
 		log.Fatalf("服务器关闭异常: %v", err)
 	}
 
-	fmt.Println("🎉 服务器已安全关闭")
+	fmt.Println("服务器已安全关闭")
 }
 
 // printServiceInfo 打印服务信息

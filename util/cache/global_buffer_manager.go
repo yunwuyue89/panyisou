@@ -449,8 +449,6 @@ func (g *GlobalBufferManager) Shutdown() error {
 		totalOperations += len(ops)
 	}
 	
-	fmt.Printf("🔄 [全局缓冲区管理器] 关闭完成，刷新%d个缓冲区，%d个操作\n", 
-		len(flushedBuffers), totalOperations)
 	
 	return nil
 }
