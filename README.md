@@ -112,6 +112,7 @@ cd pansou
 | ASYNC_MAX_BACKGROUND_WORKERS | 最大后台工作者数量 | CPU核心数×5 |
 | ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 工作者数×5 |
 | ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | `1` |
+| ASYNC_PLUGIN_ENABLED | 异步插件是否启用 | `true` |
 | HTTP_READ_TIMEOUT | HTTP读取超时(秒) | 自动计算 |
 | HTTP_WRITE_TIMEOUT | HTTP写入超时(秒) | 自动计算 |
 | HTTP_IDLE_TIMEOUT | HTTP空闲超时(秒) | `120` |

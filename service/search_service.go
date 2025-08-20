@@ -436,8 +436,8 @@ func (s *SearchService) Search(keyword string, channels []string, concurrency in
 			tgResults, tgErr = s.searchTG(keyword, channels, forceRefresh)
 		}()
 	}
-	// 如果需要搜索插件
-	if sourceType == "all" || sourceType == "plugin" {
+	// 如果需要搜索插件（且插件功能已启用）
+	if (sourceType == "all" || sourceType == "plugin") && config.AppConfig.AsyncPluginEnabled {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1373,12 +1373,9 @@ func getPluginLevelBySource(source string) int {
 
 // getPluginPriorityByName 根据插件名获取优先级
 func getPluginPriorityByName(pluginName string) int {
-	// 从已注册插件中获取优先级
-	plugins := plugin.GetRegisteredPlugins()
-	for _, p := range plugins {
-		if p.Name() == pluginName {
-			return p.Priority()
-		}
+	// 从插件管理器动态获取真实的优先级 (O(1)哈希查找)
+	if pluginInstance, exists := plugin.GetPluginByName(pluginName); exists {
+		return pluginInstance.Priority()
 	}
 	return 3 // 默认等级
 }

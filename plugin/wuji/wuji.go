@@ -151,7 +151,6 @@ func (p *WujiPlugin) searchImpl(client *http.Client, keyword string, ext map[str
 		}
 	}
 	
-	fmt.Printf("[%s] 找到搜索结果数量: %d\n", p.Name(), len(allResults))
 	
 	// 3. 并发获取每个结果的详情页磁力链接
 	finalResults := p.enrichWithMagnetLinks(allResults, client)

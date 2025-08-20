@@ -147,7 +147,6 @@ func (p *ClmaoPlugin) searchImpl(client *http.Client, keyword string, ext map[st
 		}
 	}
 	
-	fmt.Printf("[%s] 找到搜索结果数量: %d\n", p.Name(), len(allResults))
 	
 	// 3. 关键词过滤
 	searchKeyword := keyword

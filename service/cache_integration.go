@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"pansou/model"
+	"pansou/plugin"
 	"pansou/util/cache"
 )
 
@@ -82,18 +83,13 @@ func (c *CacheWriteIntegration) HandleCacheWrite(key string, results []model.Sea
 
 // getPluginPriority 获取插件优先级
 func (c *CacheWriteIntegration) getPluginPriority(pluginName string) int {
-	// 这里应该从插件管理器获取真实的优先级
-	// 暂时使用简化的映射
-	switch pluginName {
-	case "hdr4k", "susu", "panta", "xuexizhinan", "zhizhen", "labi", "wanou":
-		return 1 // 等级1插件
-	case "muou", "huban", "ouge", "duoduo", "shandian", "panyq":
-		return 2 // 等级2插件
-	case "fox4k", "qupansou", "pansearch", "hunhepan", "pan666", "jikepan":
-		return 3 // 等级3插件
-	default:
-		return 4 // 默认等级4
+	// 从插件管理器动态获取真实的优先级
+	if pluginInstance, exists := plugin.GetPluginByName(pluginName); exists {
+		return pluginInstance.Priority()
 	}
+	
+	// 如果插件不存在，返回默认等级4（最低优先级）
+	return 4
 }
 
 // estimateDataSize 估算数据大小

@@ -248,7 +248,7 @@ func NewPanSearchPlugin() *PanSearchAsyncPlugin {
 	go func() {
 		_, err := p.getBuildId()
 		if err != nil {
-			fmt.Printf("预热获取 buildId 失败: %v\n", err)
+			// fmt.Printf("预热获取 buildId 失败: %v\n", err)
 		}
 	}()
 
@@ -278,7 +278,7 @@ func (p *PanSearchAsyncPlugin) updateBuildId() {
 	// 发送请求获取页面
 	req, err := http.NewRequestWithContext(ctx, "GET", WebsiteURL, nil)
 	if err != nil {
-		fmt.Printf("创建请求失败: %v\n", err)
+		// fmt.Printf("创建请求失败: %v\n", err)
 		return
 	}
 
@@ -292,7 +292,7 @@ func (p *PanSearchAsyncPlugin) updateBuildId() {
 
 	resp, err := p.GetClient().Do(req)
 	if err != nil {
-		fmt.Printf("请求失败: %v\n", err)
+		// fmt.Printf("请求失败: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -306,7 +306,7 @@ func (p *PanSearchAsyncPlugin) updateBuildId() {
 	var bodyBuilder strings.Builder
 	_, err = io.Copy(&bodyBuilder, resp.Body)
 	if err != nil {
-		fmt.Printf("读取响应失败: %v\n", err)
+		// fmt.Printf("读取响应失败: %v\n", err)
 		return
 	}
 	body := bodyBuilder.String()
@@ -392,7 +392,7 @@ func (p *PanSearchAsyncPlugin) getBuildId() (string, error) {
 	if err != nil {
 		// 如果创建请求失败但有旧的缓存，使用旧的缓存（优雅降级）
 		if buildIdCache != "" {
-			fmt.Printf("创建请求失败，使用旧的buildId: %v\n", err)
+			// fmt.Printf("创建请求失败，使用旧的buildId: %v\n", err)
 			return buildIdCache, nil
 		}
 		return "", fmt.Errorf("创建请求失败: %w", err)
@@ -430,7 +430,7 @@ func (p *PanSearchAsyncPlugin) getBuildId() (string, error) {
 	// 如果所有重试都失败，但有旧的缓存，使用旧的缓存（优雅降级）
 	if respErr != nil || resp == nil {
 		if buildIdCache != "" {
-			fmt.Printf("请求失败，使用旧的buildId: %v\n", respErr)
+			// fmt.Printf("请求失败，使用旧的buildId: %v\n", respErr)
 			return buildIdCache, nil
 		}
 		return "", fmt.Errorf("请求失败: %w", respErr)
@@ -452,7 +452,7 @@ func (p *PanSearchAsyncPlugin) getBuildId() (string, error) {
 	if err != nil {
 		// 如果读取响应失败，但有旧的缓存，使用旧的缓存（优雅降级）
 		if buildIdCache != "" {
-			fmt.Printf("读取响应失败，使用旧的buildId: %v\n", err)
+			// fmt.Printf("读取响应失败，使用旧的buildId: %v\n", err)
 			return buildIdCache, nil
 		}
 		return "", fmt.Errorf("读取响应失败: %w", err)
@@ -465,7 +465,7 @@ func (p *PanSearchAsyncPlugin) getBuildId() (string, error) {
 	// 如果提取失败，但有旧的缓存，使用旧的缓存（优雅降级）
 	if buildId == "" {
 		if buildIdCache != "" {
-			fmt.Println("未找到buildId，使用旧的buildId")
+			// fmt.Println("未找到buildId，使用旧的buildId")
 			return buildIdCache, nil
 		}
 		return "", fmt.Errorf("未找到buildId")

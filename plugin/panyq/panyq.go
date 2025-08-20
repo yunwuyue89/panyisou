@@ -212,7 +212,6 @@ func (p *PanyqPlugin) doSearch(client *http.Client, keyword string, ext map[stri
 	credentials, err := p.getCredentials(keyword, actionIDs[ActionIDKeys[0]], client)
 	if err != nil {
 		// 如果获取凭证失败，尝试刷新Action ID并重试
-		fmt.Println("panyq: failed to get credentials, refreshing Action IDs...")
 		actionIDs, err = p.discoverActionIDs()
 		if err != nil {
 			return nil, fmt.Errorf("刷新Action ID失败: %w", err)
