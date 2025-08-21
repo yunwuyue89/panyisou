@@ -28,7 +28,7 @@ import (
 	_ "pansou/plugin/hdr4k"
 	_ "pansou/plugin/hunhepan"
 	_ "pansou/plugin/jikepan"
-	_ "pansou/plugin/pan666"
+	_ "pansou/plugin/panwiki"
 	_ "pansou/plugin/pansearch"
 	_ "pansou/plugin/panta"
 	_ "pansou/plugin/qupansou"
