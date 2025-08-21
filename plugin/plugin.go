@@ -97,8 +97,33 @@ func (pm *PluginManager) RegisterPlugin(plugin AsyncSearchPlugin) {
 
 // RegisterAllGlobalPlugins 注册所有全局异步插件
 func (pm *PluginManager) RegisterAllGlobalPlugins() {
-	for _, plugin := range GetRegisteredPlugins() {
-		pm.RegisterPlugin(plugin)
+	pm.RegisterGlobalPluginsWithFilter([]string{})
+}
+
+// RegisterGlobalPluginsWithFilter 根据过滤器注册全局异步插件
+// enabledPlugins: 启用的插件名称列表，如果为空则启用所有插件
+func (pm *PluginManager) RegisterGlobalPluginsWithFilter(enabledPlugins []string) {
+	allPlugins := GetRegisteredPlugins()
+	
+	// 如果没有指定启用的插件，则启用所有插件
+	if len(enabledPlugins) == 0 {
+		for _, plugin := range allPlugins {
+			pm.RegisterPlugin(plugin)
+		}
+		return
+	}
+	
+	// 创建启用插件名称的映射表，用于快速查找
+	enabledMap := make(map[string]bool)
+	for _, name := range enabledPlugins {
+		enabledMap[name] = true
+	}
+	
+	// 只注册在启用列表中的插件
+	for _, plugin := range allPlugins {
+		if enabledMap[plugin.Name()] {
+			pm.RegisterPlugin(plugin)
+		}
 	}
 }
 

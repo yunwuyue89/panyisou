@@ -113,6 +113,7 @@ cd pansou
 | ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 工作者数×5 |
 | ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | `1` |
 | ASYNC_PLUGIN_ENABLED | 异步插件是否启用 | `true` |
+| ENABLED_PLUGINS | 指定启用插件，多个插件用逗号分隔 | 所有 |
 | HTTP_READ_TIMEOUT | HTTP读取超时(秒) | 自动计算 |
 | HTTP_WRITE_TIMEOUT | HTTP写入超时(秒) | 自动计算 |
 | HTTP_IDLE_TIMEOUT | HTTP空闲超时(秒) | `120` |
