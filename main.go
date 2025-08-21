@@ -107,8 +107,12 @@ func startServer() {
 	// 注册所有全局插件（通过init函数自动注册到全局注册表）
 	pluginManager.RegisterAllGlobalPlugins()
 
-	// 更新默认并发数（使用实际插件数）
-	config.UpdateDefaultConcurrency(len(pluginManager.GetPlugins()))
+	// 更新默认并发数（如果插件被禁用则使用0）
+	pluginCount := 0
+	if config.AppConfig.AsyncPluginEnabled {
+		pluginCount = len(pluginManager.GetPlugins())
+	}
+	config.UpdateDefaultConcurrency(pluginCount)
 
 	// 初始化搜索服务
 	searchService := service.NewSearchService(pluginManager)
@@ -211,7 +215,8 @@ func printServiceInfo(port string, pluginManager *plugin.PluginManager) {
 	} else {
 		channelCount := len(config.AppConfig.DefaultChannels)
 		pluginCount := 0
-		if pluginManager != nil {
+		// 只有插件启用时才计算插件数
+		if config.AppConfig.AsyncPluginEnabled && pluginManager != nil {
 			pluginCount = len(pluginManager.GetPlugins())
 		}
 		fmt.Printf("默认并发数: %d (= 频道数%d + 插件数%d + 10)\n",
@@ -232,9 +237,7 @@ func printServiceInfo(port string, pluginManager *plugin.PluginManager) {
 	if config.AppConfig.EnableCompression {
 		fmt.Printf("响应压缩已启用: 最小压缩大小=%d字节\n",
 			config.AppConfig.MinSizeToCompress)
-	} else {
-		fmt.Println("响应压缩已禁用")
-	}
+	} 
 
 	// 输出GC配置信息
 	fmt.Printf("GC配置: 触发阈值=%d%%, 内存优化=%v\n",

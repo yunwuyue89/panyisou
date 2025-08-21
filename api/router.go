@@ -32,10 +32,12 @@ func SetupRouter(searchService *service.SearchService) *gin.Engine {
 		
 		// 健康检查接口
 		api.GET("/health", func(c *gin.Context) {
-			// 获取插件信息
+			// 根据配置决定是否返回插件信息
 			pluginCount := 0
 			pluginNames := []string{}
-			if searchService != nil && searchService.GetPluginManager() != nil {
+			pluginsEnabled := config.AppConfig.AsyncPluginEnabled
+			
+			if pluginsEnabled && searchService != nil && searchService.GetPluginManager() != nil {
 				plugins := searchService.GetPluginManager().GetPlugins()
 				pluginCount = len(plugins)
 				for _, p := range plugins {
@@ -45,14 +47,22 @@ func SetupRouter(searchService *service.SearchService) *gin.Engine {
 			
 			// 获取频道信息
 			channels := config.AppConfig.DefaultChannels
+			channelsCount := len(channels)
 			
-			c.JSON(200, gin.H{
+			response := gin.H{
 				"status": "ok",
-				"plugins_enabled": true,
-				"plugin_count": pluginCount,
-				"plugins": pluginNames,
+				"plugins_enabled": pluginsEnabled,
 				"channels": channels,
-			})
+				"channels_count": channelsCount,
+			}
+			
+			// 只有当插件启用时才返回插件相关信息
+			if pluginsEnabled {
+				response["plugin_count"] = pluginCount
+				response["plugins"] = pluginNames
+			}
+			
+			c.JSON(200, response)
 		})
 	}
 	

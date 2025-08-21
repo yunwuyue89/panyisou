@@ -143,7 +143,8 @@ func getDefaultConcurrency() int {
 	return concurrency
 }
 
-// 更新默认并发数（在真实插件数已知时调用）
+// 更新默认并发数（根据实际插件数或0调用）
+// pluginCount: 如果插件被禁用则为0，否则为实际插件数
 func UpdateDefaultConcurrency(pluginCount int) {
 	if AppConfig == nil {
 		return
@@ -158,7 +159,7 @@ func UpdateDefaultConcurrency(pluginCount int) {
 	// 计算频道数
 	channelCount := len(AppConfig.DefaultChannels)
 	
-	// 计算并发数 = 频道数 + 实际插件数 + 10
+	// 计算并发数 = 频道数 + 插件数（插件禁用时为0）+ 10
 	concurrency := channelCount + pluginCount + 10
 	if concurrency < 1 {
 		concurrency = 1 // 确保至少为1

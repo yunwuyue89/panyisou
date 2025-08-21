@@ -353,6 +353,7 @@ GET /api/search?kw=速度与激情&channels=tgsearchers3,xxx&conc=2&refresh=true
 
 ```json
 {
+  "channels_count": 1,
   "channels": [
     "tgsearchers3"
   ],
