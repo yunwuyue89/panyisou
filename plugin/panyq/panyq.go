@@ -204,7 +204,7 @@ func (p *PanyqPlugin) doSearch(client *http.Client, keyword string, ext map[stri
 	// 尝试获取或发现 Action ID
 	actionIDs, err := p.getOrDiscoverActionIDs()
 	if err != nil {
-		fmt.Println("panyq: failed to get Action IDs:", err)
+		// fmt.Println("panyq: failed to get Action IDs:", err)
 		return nil, fmt.Errorf("获取Action ID失败: %w", err)
 	}
 
@@ -261,7 +261,7 @@ func (p *PanyqPlugin) doSearch(client *http.Client, keyword string, ext map[stri
 				
 				pageHits, _, err := p.getSearchResults(credentials.Sign, pageNum, client)
 				if err != nil {
-					fmt.Printf("panyq: failed to get page %d: %v\n", pageNum, err)
+					// fmt.Printf("panyq: failed to get page %d: %v\n", pageNum, err)
 					return
 				}
 				
@@ -428,7 +428,7 @@ func (p *PanyqPlugin) discoverActionIDs() (map[string]string, error) {
 	}
 	
 	if DebugLog {
-		fmt.Printf("panyq: 找到 %d 个潜在的 Action ID\n", len(potentialIDs))
+		// fmt.Printf("panyq: 找到 %d 个潜在的 Action ID\n", len(potentialIDs))
 		if len(potentialIDs) > 0 {
 			fmt.Printf("panyq: 样例ID: %s\n", potentialIDs[0])
 		}

@@ -415,9 +415,6 @@ func (g *GlobalBufferManager) performCleanup() {
 	// 计算内存使用量
 	g.updateMemoryUsage()
 	
-	if len(toDelete) > 0 {
-		fmt.Printf("🧹 [全局缓冲区] 清理完成，删除%d个过期缓冲区\n", len(toDelete))
-	}
 }
 
 // updateMemoryUsage 更新内存使用量估算
