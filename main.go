@@ -54,6 +54,7 @@ import (
 	_ "pansou/plugin/cldi"
 	_ "pansou/plugin/xiaozhang"
 	_ "pansou/plugin/libvio"
+	_ "pansou/plugin/leijing"
 )
 
 // 全局缓存写入管理器

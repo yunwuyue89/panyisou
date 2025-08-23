@@ -41,7 +41,7 @@ func NewLibvioPlugin() *LibvioPlugin {
 	debugMode := false // 开启调试模式
 	
 	p := &LibvioPlugin{
-		BaseAsyncPlugin: plugin.NewBaseAsyncPluginWithFilter("libvio", 4, true ), // 优先级4	
+		BaseAsyncPlugin: plugin.NewBaseAsyncPluginWithFilter("libvio", 1, true ),	
 		debugMode:       debugMode,
 		cacheTTL:        30 * time.Minute,
 	}
