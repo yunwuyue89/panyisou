@@ -13,8 +13,10 @@ import {
 
 import { loadConfig } from './utils/config.js';
 import { HttpClient } from './utils/http-client.js';
+import { BackendManager } from './utils/backend-manager.js';
 import { searchTool, executeSearchTool } from './tools/search.js';
 import { healthTool, executeHealthTool } from './tools/health.js';
+import { startBackendTool, executeStartBackendTool } from './tools/start-backend.js';
 
 /**
  * PanSou MCP服务器
@@ -22,6 +24,7 @@ import { healthTool, executeHealthTool } from './tools/health.js';
 class PanSouMCPServer {
   private server: Server;
   private httpClient: HttpClient;
+  private backendManager: BackendManager;
   private config: any;
 
   constructor() {
@@ -41,8 +44,10 @@ class PanSouMCPServer {
     // 加载配置
     this.config = loadConfig();
     this.httpClient = new HttpClient(this.config);
+    this.backendManager = new BackendManager(this.config, this.httpClient);
 
     this.setupHandlers();
+    this.setupProcessHandlers();
   }
 
   /**
@@ -52,7 +57,7 @@ class PanSouMCPServer {
     // 工具列表处理器
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: [searchTool, healthTool],
+        tools: [healthTool, startBackendTool, searchTool],
       };
     });
 
@@ -60,19 +65,11 @@ class PanSouMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      // 记录活动，重置空闲计时器
+      this.backendManager.recordActivity();
+
       try {
         switch (name) {
-          case 'search_netdisk':
-            const searchResult = await executeSearchTool(args, this.httpClient);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: searchResult,
-                },
-              ],
-            };
-
           case 'check_service_health':
             const healthResult = await executeHealthTool(args, this.httpClient);
             return {
@@ -80,6 +77,28 @@ class PanSouMCPServer {
                 {
                   type: 'text',
                   text: healthResult,
+                },
+              ],
+            };
+
+          case 'start_backend':
+            const startResult = await executeStartBackendTool(args, this.httpClient, this.config);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: startResult,
+                },
+              ],
+            };
+
+          case 'search_netdisk':
+            const searchResult = await executeSearchTool(args, this.httpClient);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: searchResult,
                 },
               ],
             };
@@ -131,6 +150,9 @@ class PanSouMCPServer {
     // 资源读取处理器
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
+
+      // 记录活动，重置空闲计时器
+      this.backendManager.recordActivity();
 
       try {
         switch (uri) {
@@ -268,9 +290,59 @@ class PanSouMCPServer {
   }
 
   /**
+   * 设置进程处理器
+   */
+  private setupProcessHandlers(): void {
+    // 处理优雅关闭
+    const gracefulShutdown = async (signal: string) => {
+      console.error(`\n📡 收到 ${signal} 信号，正在优雅关闭...`);
+      
+      if (this.config.autoStartBackend) {
+        // 延迟关闭后端服务
+        this.backendManager.scheduleShutdown();
+      }
+      
+      // 等待一小段时间让MCP客户端处理完当前请求
+      setTimeout(() => {
+        process.exit(0);
+      }, 1000);
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    
+    // Windows特有的关闭事件
+    if (process.platform === 'win32') {
+      process.on('SIGBREAK', () => gracefulShutdown('SIGBREAK'));
+    }
+  }
+
+  /**
    * 启动服务器
    */
   public async start(): Promise<void> {
+    // 如果启用了自动启动后端服务
+    if (this.config.autoStartBackend) {
+      console.error('🔍 检查后端服务状态...');
+      
+      // 在启动阶段启用静默模式，避免输出网络错误信息
+      this.httpClient.setSilentMode(true);
+      
+      const isRunning = await this.backendManager.isBackendRunning();
+      if (!isRunning) {
+        console.error('🚀 自动启动后端服务...');
+        const started = await this.backendManager.startBackend();
+        if (!started) {
+          console.error('❌ 后端服务启动失败，MCP服务器将继续运行但功能可能受限');
+        }
+      } else {
+        console.error('✅ 后端服务已在运行');
+      }
+      
+      // 启动完成后关闭静默模式
+      this.httpClient.setSilentMode(false);
+    }
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
@@ -279,6 +351,8 @@ class PanSouMCPServer {
     console.error(`📡 服务地址: ${this.config.serverUrl}`);
     console.error(`⏱️  请求超时: ${this.config.requestTimeout}ms`);
     console.error(`📊 最大结果数: ${this.config.maxResults}`);
+    console.error(`🔧 自动启动后端: ${this.config.autoStartBackend ? '启用' : '禁用'}`);
+    // 空闲监控信息已在BackendManager构造函数中显示
   }
 }
 
