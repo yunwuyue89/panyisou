@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "pansou": {
+      "command": "node",
+      "args": [
+        "c:\\Users\\YAYOI\\Desktop\\myproject\\pansou\\typescript\\dist\\index.js"
+      ],
+      "env": {
+        "PANSOU_API_URL": "http://localhost:8888",
+        "PANSOU_TIMEOUT": "30000",
+        "PANSOU_MAX_RESULTS": "50",
+        "PANSOU_DEFAULT_CLOUD_TYPES": "baidu,ali,quark,115"
+      }
+    }
+  }
+}
