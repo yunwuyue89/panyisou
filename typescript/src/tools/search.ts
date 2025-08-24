@@ -101,6 +101,12 @@ export async function executeSearchTool(args: unknown, httpClient: HttpClient): 
     // 验证结果类型
     const resultType = validateResultType(validatedArgs.result_type);
     
+    // 检查后端服务状态
+    const isHealthy = await httpClient.checkHealth();
+    if (!isHealthy) {
+      throw new Error('后端服务未运行，请先启动后端服务。');
+    }
+    
     // 构建搜索请求
     const searchRequest: SearchRequest = {
       kw: validatedArgs.keyword,
