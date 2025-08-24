@@ -94,6 +94,7 @@ export interface HealthResponse {
 export class HttpClient {
   private client: AxiosInstance;
   private config: Config;
+  private silentMode: boolean = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -132,15 +133,17 @@ export class HttpClient {
         return response;
       },
       (error) => {
-        if (error.response) {
-          console.error(`[HTTP] 响应错误: ${error.response.status} ${error.response.statusText}`);
-          if (this.config.logLevel === 'debug') {
-            console.error('[HTTP] 错误详情:', error.response.data);
+        if (!this.silentMode) {
+          if (error.response) {
+            console.error(`[HTTP] 响应错误: ${error.response.status} ${error.response.statusText}`);
+            if (this.config.logLevel === 'debug') {
+              console.error('[HTTP] 错误详情:', error.response.data);
+            }
+          } else if (error.request) {
+            console.error('[HTTP] 网络错误: 无法连接到服务器');
+          } else {
+            console.error('[HTTP] 请求配置错误:', error.message);
           }
-        } else if (error.request) {
-          console.error('[HTTP] 网络错误: 无法连接到服务器');
-        } else {
-          console.error('[HTTP] 请求配置错误:', error.message);
         }
         return Promise.reject(error);
       }
@@ -257,6 +260,20 @@ export class HttpClient {
     // 更新axios实例配置
     this.client.defaults.baseURL = this.config.serverUrl;
     this.client.defaults.timeout = this.config.requestTimeout;
+  }
+
+  /**
+   * 设置静默模式
+   */
+  setSilentMode(silent: boolean): void {
+    this.silentMode = silent;
+  }
+
+  /**
+   * 获取静默模式状态
+   */
+  isSilentMode(): boolean {
+    return this.silentMode;
   }
 }
 
