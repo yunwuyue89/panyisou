@@ -6,10 +6,16 @@
         "c:\\Users\\YAYOI\\Desktop\\myproject\\pansou\\typescript\\dist\\index.js"
       ],
       "env": {
-        "PANSOU_API_URL": "http://localhost:8888",
-        "PANSOU_TIMEOUT": "30000",
-        "PANSOU_MAX_RESULTS": "50",
-        "PANSOU_DEFAULT_CLOUD_TYPES": "baidu,ali,quark,115"
+        "PANSOU_SERVER_URL": "http://localhost:8888",
+        "REQUEST_TIMEOUT": "30",
+        "MAX_RESULTS": "50",
+        "DEFAULT_CLOUD_TYPES": "baidu,aliyun,quark,115",
+        "AUTO_START_BACKEND": "true",
+        "BACKEND_SHUTDOWN_DELAY": "5000",
+        "BACKEND_STARTUP_TIMEOUT": "30000",
+        "IDLE_TIMEOUT": "300000",
+        "ENABLE_IDLE_SHUTDOWN": "true",
+        "PROJECT_ROOT_PATH": "c:\\Users\\YAYOI\\Desktop\\myproject\\pansou"
       }
     }
   }
