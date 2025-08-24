@@ -55,9 +55,6 @@ PanSou 后端服务通常运行在 `http://localhost:8888` (默认地址)。目�
 ```bash
 # Windows (PowerShell/CMD)
 go build -o pansou.exe .
-
-# Linux/macOS
-go build -o pansou .
 ```
 
 - 构建完成后，运行生成的可执行文件以启动后端服务：
@@ -65,9 +62,6 @@ go build -o pansou .
 ```bash
 # Windows
 .\pansou.exe
-
-# Linux/macOS
-./pansou
 ```
 
 服务默认将在 `http://localhost:8888` 启动。
