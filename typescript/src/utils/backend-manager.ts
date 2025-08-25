@@ -4,6 +4,10 @@ import path from 'path';
 import { HttpClient } from './http-client.js';
 import { Config } from './config.js';
 import { ActivityMonitor } from './activity-monitor.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /**
  * 后端服务管理器
@@ -51,6 +55,60 @@ export class BackendManager {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * 智能检测Docker容器状态
+   */
+  private async detectDockerContainer(): Promise<boolean> {
+    try {
+      // 检查Docker是否可用
+      await execAsync('docker --version');
+      
+      // 检查是否有运行中的pansou容器
+      const { stdout } = await execAsync('docker ps --format "{{.Names}}" --filter "name=pansou"');
+      const runningContainers = stdout.trim().split('\n').filter(name => name.includes('pansou'));
+      
+      if (runningContainers.length > 0) {
+        console.error(`🐳 检测到运行中的Docker容器: ${runningContainers.join(', ')}`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      // Docker不可用或没有容器运行
+      return false;
+    }
+  }
+
+  /**
+   * 智能检测部署模式
+   * @returns 'docker' | 'source' | 'unknown'
+   */
+  private async detectDeploymentMode(): Promise<'docker' | 'source' | 'unknown'> {
+    // 1. 首先检查是否有Docker容器运行
+    const hasDockerContainer = await this.detectDockerContainer();
+    if (hasDockerContainer) {
+      return 'docker';
+    }
+    
+    // 2. 检查是否有Go可执行文件
+    const execPath = await this.findGoExecutable();
+    if (execPath) {
+      return 'source';
+    }
+    
+    // 3. 检查服务是否已经在运行（可能是手动启动的）
+    this.httpClient.setSilentMode(true);
+    const isRunning = await this.isBackendRunning();
+    this.httpClient.setSilentMode(false);
+    
+    if (isRunning) {
+      console.error('✅ 检测到后端服务已在运行（可能是手动启动）');
+      return 'source'; // 假设是源码模式
+    }
+    
+    return 'unknown';
   }
 
   /**
@@ -110,7 +168,65 @@ export class BackendManager {
       return true;
     }
 
-    // 首先检查是否已有服务在运行
+    // 智能检测部署模式（如果未明确配置Docker模式）
+    let effectiveDockerMode = this.config.dockerMode;
+    
+    if (!effectiveDockerMode) {
+      console.error('🔍 正在智能检测部署模式...');
+      const detectedMode = await this.detectDeploymentMode();
+      
+      switch (detectedMode) {
+        case 'docker':
+          console.error('🐳 智能检测：使用Docker部署模式');
+          effectiveDockerMode = true;
+          break;
+        case 'source':
+          console.error('📦 智能检测：使用源码部署模式');
+          effectiveDockerMode = false;
+          break;
+        case 'unknown':
+          console.error('❓ 无法检测部署模式，使用默认源码模式');
+          effectiveDockerMode = false;
+          break;
+      }
+    } else {
+      console.error(`⚙️  使用配置指定的模式: ${effectiveDockerMode ? 'Docker' : '源码'}`);
+    }
+
+    // Docker模式处理
+    if (effectiveDockerMode) {
+      console.error('🐳 Docker模式已启用，正在检查后端服务连接...');
+      
+      // Docker模式下进行重试检查，因为容器可能需要时间启动
+      const maxRetries = 3;
+      const retryDelay = 2000; // 2秒
+      
+      this.httpClient.setSilentMode(true);
+      
+      for (let i = 0; i < maxRetries; i++) {
+        const isRunning = await this.isBackendRunning();
+        if (isRunning) {
+          this.httpClient.setSilentMode(false);
+          console.error('✅ Docker模式下后端服务连接成功');
+          return true;
+        }
+        
+        if (i < maxRetries - 1) {
+          console.error(`🔄 连接尝试 ${i + 1}/${maxRetries} 失败，${retryDelay/1000}秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+      
+      this.httpClient.setSilentMode(false);
+      console.error('❌ Docker模式下后端服务连接失败');
+      console.error('请确保Docker容器正在运行：');
+      console.error('  docker-compose up -d');
+      console.error('或检查Docker容器状态：');
+      console.error('  docker ps');
+      return false;
+    }
+
+    // 源码模式：首先检查是否已有服务在运行
     this.httpClient.setSilentMode(true);
     const isRunning = await this.isBackendRunning();
     this.httpClient.setSilentMode(false);
@@ -124,7 +240,8 @@ export class BackendManager {
     const execPath = await this.findGoExecutable();
     if (!execPath) {
       console.error('❌ 未找到PanSou后端可执行文件');
-      console.error('请确保在项目根目录下存在以下文件之一：');
+      console.error('如果您使用Docker部署，请在MCP配置中设置 DOCKER_MODE=true');
+      console.error('如果您使用源码部署，请确保在项目根目录下存在以下文件之一：');
       console.error('  - pansou.exe / pansou');
       console.error('  - main.exe / main');
       return false;

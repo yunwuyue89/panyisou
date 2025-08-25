@@ -186,7 +186,8 @@ export class HttpClient {
 
       const response: AxiosResponse<ApiResponse<SearchResponseData>> = await this.client.post('/api/search', requestData);
       
-      if (response.data.code !== 200) {
+      // 兼容不同版本的响应格式：源码版本使用200，Docker版本使用0
+      if (response.data.code !== 200 && response.data.code !== 0) {
         throw new Error(response.data.message || '搜索请求失败');
       }
 

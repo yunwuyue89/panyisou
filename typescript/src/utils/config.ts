@@ -19,7 +19,9 @@ const ConfigSchema = z.object({
   idleTimeout: z.number().positive().default(300000), // 默认5分钟
   enableIdleShutdown: z.boolean().default(true),
   // 项目根目录路径
-  projectRootPath: z.string().optional()
+  projectRootPath: z.string().optional(),
+  // Docker部署模式（当设置为true时，不会尝试启动本地进程）
+  dockerMode: z.boolean().default(false)
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -56,7 +58,9 @@ export function loadConfig(): Config {
     idleTimeout: process.env.IDLE_TIMEOUT ? parseInt(process.env.IDLE_TIMEOUT) : undefined,
     enableIdleShutdown: process.env.ENABLE_IDLE_SHUTDOWN !== 'false', // 默认为true，除非明确设置为false
     // 项目根目录路径
-    projectRootPath: process.env.PROJECT_ROOT_PATH
+    projectRootPath: process.env.PROJECT_ROOT_PATH,
+    // Docker部署模式
+    dockerMode: process.env.DOCKER_MODE === 'true'
   };
 
   // 移除undefined值，让zod使用默认值
