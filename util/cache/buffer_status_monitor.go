@@ -248,7 +248,7 @@ func NewBufferStatusMonitor() *BufferStatusMonitor {
 		alertThresholds: &AlertThresholds{
 			MemoryUsageWarning:     50 * 1024 * 1024,  // 50MB
 			MemoryUsageCritical:    100 * 1024 * 1024, // 100MB
-			BufferCountWarning:     30,
+			BufferCountWarning:     40,
 			BufferCountCritical:    50,
 			OperationQueueWarning:  500,
 			OperationQueueCritical: 1000,
@@ -559,7 +559,7 @@ func (b *BufferStatusMonitor) triggerAlert(component, level, message string) {
 	b.alertManager.mutex.Unlock()
 	
 	// 输出报警日志
-	fmt.Printf("🚨 [报警] %s - %s: %s\n", level, component, message)
+	// fmt.Printf("🚨 [报警] %s - %s: %s\n", level, component, message)
 }
 
 // updatePredictions 更新预测

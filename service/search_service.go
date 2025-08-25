@@ -268,9 +268,9 @@ func injectMainCacheToAsyncPlugins(pluginManager *plugin.PluginManager, mainCach
 					if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
 			displayKey := key[:8] + "..."
 			if keyword != "" {
-				fmt.Printf("📝 [异步插件 %s] 初始缓存创建: %s(关键词:%s) | 结果数: %d\n", pluginName, displayKey, keyword, len(newResults))
+				fmt.Printf("[异步插件 %s] 初始缓存创建: %s(关键词:%s) | 结果数: %d\n", pluginName, displayKey, keyword, len(newResults))
 			} else {
-				fmt.Printf("📝 [异步插件 %s] 初始缓存创建: %s | 结果数: %d\n", pluginName, key, len(newResults))
+				fmt.Printf("[异步插件 %s] 初始缓存创建: %s | 结果数: %d\n", pluginName, key, len(newResults))
 			}
 		}
 		}
@@ -1293,7 +1293,7 @@ func (s *SearchService) searchPlugins(keyword string, plugins []string, forceRef
 			// 🔥 修复：使用同步方式确保数据写入磁盘
 			enhancedTwoLevelCache.SetBothLevels(key, data, ttl)
 				if config.AppConfig != nil && config.AppConfig.AsyncLogEnabled {
-					fmt.Printf("📝 [主程序] 缓存更新完成: %s | 结果数: %d", 
+					fmt.Printf("[主程序] 缓存更新完成: %s | 结果数: %d", 
 						key, len(res))
 				}
 			}
