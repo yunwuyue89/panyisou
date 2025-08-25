@@ -137,6 +137,8 @@ node ./typescript/dist/index.js
 - 选择 `添加服务器` 、 `从JSON导入` 。
 - 加入服务配置(可以直接复制项目根目录下的 `mcp-config.json` 内容)：
 
+
+
 ```json
 {
   "mcpServers": {
@@ -169,6 +171,8 @@ node ./typescript/dist/index.js
 - 如需强制指定部署模式，可修改 `DOCKER_MODE` 和 `AUTO_START_BACKEND` 参数
 
 #### 5. 启动 MCP 服务，并在对话界面启用，开始尝试搜索
+
+<img width="495" height="649" alt="image" src="https://github.com/user-attachments/assets/b8c72649-03e8-4f52-86ba-aa16c4cc3b7e" />
 
 ---
 
