@@ -167,7 +167,6 @@ node ./typescript/dist/index.js
 
 **注意**：
 - 请将 `C:\\full\\path\\to\\your\\project` 替换为您项目实际的完整路径
-- 使用默认配置即可享受智能部署模式检测功能
 - 如需强制指定部署模式，可修改 `DOCKER_MODE` 和 `AUTO_START_BACKEND` 参数
 
 #### 5. 启动 MCP 服务，并在对话界面启用，开始尝试搜索
@@ -225,11 +224,7 @@ npm install
 npm run build
 ```
 
-#### 3. 配置 MCP 服务（统一配置）
-
-**🎉 新功能：智能部署模式检测**
-
-从 v2.0 开始，PanSou MCP 服务支持智能检测部署模式，无需手动配置 Docker 或源码模式。项目根目录下的 `mcp-config.json` 现在是统一配置文件，适用于所有部署方式：
+#### 3. 配置 MCP 服务
 
 ```json
 {
@@ -245,7 +240,7 @@ npm run build
         "MAX_RESULTS": "50",
         "DEFAULT_CLOUD_TYPES": "baidu,aliyun,quark,115",
         "AUTO_START_BACKEND": "true",
-        "DOCKER_MODE": "false",
+        "DOCKER_MODE": "true",
         "BACKEND_SHUTDOWN_DELAY": "5000",
         "BACKEND_STARTUP_TIMEOUT": "30000",
         "IDLE_TIMEOUT": "300000",
@@ -299,14 +294,7 @@ node .\typescript\dist\index.js
 
 ### 配置文件说明
 
-**🔄 配置文件合并 (v2.0)**
-
-从 v2.0 版本开始，原来的 `mcp-config.json` 和 `mcp-config-docker.json` 已合并为统一的 `mcp-config.json` 配置文件。
-
-**向后兼容性**：
-- 旧的配置文件已自动备份为 `mcp-config-source.json.backup` 和 `mcp-config-docker.json.backup`
-- 如果您有自定义配置，可以参考备份文件进行迁移
-- 新的统一配置支持所有之前的功能，并增加了智能检测能力
+无论是源码部署后端，还是Docker部署后端，都可以用统一的 `mcp-config.json` 配置文件。
 
 ### 部署方式的优势
 
