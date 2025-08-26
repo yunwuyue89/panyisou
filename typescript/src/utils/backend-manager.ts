@@ -283,13 +283,25 @@ export class BackendManager {
       // 捕获输出（用于调试）
       if (this.process.stdout) {
         this.process.stdout.on('data', (data) => {
-          console.error('Backend stdout:', data.toString().trim());
+          const output = data.toString().trim();
+          if (output) {
+            console.error('Backend stdout:', output);
+          }
         });
       }
 
       if (this.process.stderr) {
         this.process.stderr.on('data', (data) => {
-          console.error('Backend stderr:', data.toString().trim());
+          const output = data.toString().trim();
+          if (output) {
+            // 区分错误和正常日志
+            if (output.includes('error') || output.includes('Error') || output.includes('ERROR') || 
+                output.includes('panic') || output.includes('fatal') || output.includes('failed')) {
+              console.error('❌ Backend错误:', output);
+            } else {
+              console.error('Backend stderr:', output);
+            }
+          }
         });
       }
 
