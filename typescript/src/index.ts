@@ -249,32 +249,34 @@ class PanSouMCPServer {
   private async getCloudTypesResource() {
     const cloudTypes = {
       supported: [
-        'baidu',      // 百度网盘
-        'ali',        // 阿里云盘
-        'quark',      // 夸克网盘
-        'uc',         // UC网盘
-        '115',        // 115网盘
-        'lanzou',     // 蓝奏云
-        'tianyi',     // 天翼云盘
-        'weiyun',     // 微云
-        'onedrive',   // OneDrive
-        'googledrive',// Google Drive
-        'mega',       // MEGA
-        'other'       // 其他
+        'baidu',    // 百度网盘
+        'aliyun',   // 阿里云盘
+        'quark',    // 夸克网盘
+        'tianyi',   // 天翼云盘
+        'uc',       // UC网盘
+        'mobile',   // 移动云盘
+        '115',      // 115网盘
+        'pikpak',   // PikPak
+        'xunlei',   // 迅雷网盘
+        '123',      // 123网盘
+        'magnet',   // 磁力链接
+        'ed2k',     // 电驴链接
+        'others'    // 其他
       ],
       description: {
         'baidu': '百度网盘',
-        'ali': '阿里云盘',
+        'aliyun': '阿里云盘',
         'quark': '夸克网盘',
-        'uc': 'UC网盘',
-        '115': '115网盘',
-        'lanzou': '蓝奏云',
         'tianyi': '天翼云盘',
-        'weiyun': '微云',
-        'onedrive': 'OneDrive',
-        'googledrive': 'Google Drive',
-        'mega': 'MEGA',
-        'other': '其他网盘'
+        'uc': 'UC网盘',
+        'mobile': '移动云盘',
+        '115': '115网盘',
+        'pikpak': 'PikPak',
+        'xunlei': '迅雷网盘',
+        '123': '123网盘',
+        'magnet': '磁力链接',
+        'ed2k': '电驴链接',
+        'others': '其他网盘'
       }
     };
 
