@@ -1,6 +1,6 @@
 module pansou
 
-go 1.25.0
+go 1.23.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
