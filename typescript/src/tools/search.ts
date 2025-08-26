@@ -133,6 +133,13 @@ export async function executeSearchTool(args: unknown, httpClient: HttpClient): 
     }
     
     if (error instanceof Error) {
+      console.error('搜索过程中发生错误:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        timestamp: new Date().toISOString(),
+        originalArgs: args
+      });
       throw error;
     }
     
