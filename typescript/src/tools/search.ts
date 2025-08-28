@@ -14,7 +14,7 @@ const SearchToolArgsSchema = z.object({
   source_type: z.enum(['all', 'tg', 'plugin']).optional().default('all').describe('数据来源类型'),
   force_refresh: z.boolean().optional().default(false).describe('强制刷新缓存'),
   result_type: z.enum(['all', 'results', 'merge']).optional().default('merge').describe('结果类型'),
-  concurrency: z.number().int().positive().optional().describe('并发搜索数量'),
+  concurrency: z.number().int().min(0).optional().describe('并发搜索数量，0表示自动计算'),
   ext_params: z.record(z.any()).optional().describe('扩展参数，传递给插件的自定义参数')
 });
 
@@ -70,7 +70,7 @@ export const searchTool: Tool = {
       },
       concurrency: {
         type: 'number',
-        description: '并发搜索数量，不指定则自动计算'
+        description: '并发搜索数量，0或不指定则自动计算'
       },
       ext_params: {
         type: 'object',
