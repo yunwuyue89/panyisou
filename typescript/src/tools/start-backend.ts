@@ -42,7 +42,7 @@ export async function executeStartBackendTool(
     const params = args as StartBackendArgs;
     const forceRestart = params?.force_restart || false;
 
-    console.log('🚀 启动后端服务工具被调用');
+    console.log('启动后端服务工具被调用');
     
     // 如果没有提供依赖项，则创建默认实例
     if (!config) {
@@ -73,10 +73,10 @@ export async function executeStartBackendTool(
     }
     
     if (isHealthy && forceRestart) {
-      console.log('🔄 强制重启后端服务...');
+      console.log('强制重启后端服务...');
     }
     
-    console.log('🚀 正在启动后端服务...');
+    console.log('正在启动后端服务...');
     const started = await backendManager.startBackend();
     
     if (!started) {
@@ -89,7 +89,7 @@ export async function executeStartBackendTool(
     }
     
     // 等待服务完全启动并进行健康检查
-    console.log('⏳ 等待服务完全启动...');
+    console.log('等待服务完全启动...');
     const maxRetries = 10;
     let retries = 0;
     
@@ -98,7 +98,7 @@ export async function executeStartBackendTool(
       const healthy = await httpClient.testConnection();
       
       if (healthy) {
-        console.log('✅ 后端服务启动成功并通过健康检查');
+        console.log('后端服务启动成功并通过健康检查');
         return JSON.stringify({
           success: true,
           message: '后端服务启动成功',
@@ -109,7 +109,7 @@ export async function executeStartBackendTool(
       }
       
       retries++;
-      console.log(`🔍 健康检查重试 ${retries}/${maxRetries}...`);
+      console.log(`健康检查重试 ${retries}/${maxRetries}...`);
     }
     
     return JSON.stringify({

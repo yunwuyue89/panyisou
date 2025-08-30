@@ -37,12 +37,12 @@ export class BackendManager {
       
       // 设置空闲监控回调
       this.activityMonitor.setOnIdleCallback(async () => {
-        console.error('⏰ 检测到空闲超时，自动关闭后端服务');
+        console.error('检测到空闲超时，自动关闭后端服务');
         await this.stopBackend();
         // 退出整个进程
         process.exit(0);
       });
-      console.error(`⏱️  空闲监控已启用，超时时间: ${this.config.idleTimeout / 1000} 秒`);
+      console.error(`空闲监控已启用，超时时间: ${this.config.idleTimeout / 1000} 秒`);
     }
   }
 
@@ -70,7 +70,7 @@ export class BackendManager {
       const runningContainers = stdout.trim().split('\n').filter(name => name.includes('pansou'));
       
       if (runningContainers.length > 0) {
-        console.error(`🐳 检测到运行中的Docker容器: ${runningContainers.join(', ')}`);
+        console.error(`检测到运行中的Docker容器: ${runningContainers.join(', ')}`);
         return true;
       }
       
@@ -104,7 +104,7 @@ export class BackendManager {
     this.httpClient.setSilentMode(false);
     
     if (isRunning) {
-      console.error('✅ 检测到后端服务已在运行（可能是手动启动）');
+      console.error('检测到后端服务已在运行（可能是手动启动）');
       return 'source'; // 假设是源码模式
     }
     
@@ -138,24 +138,24 @@ export class BackendManager {
       );
     }
 
-    console.error('🔍 查找后端可执行文件...');
+    console.error('查找后端可执行文件...');
     if (configProjectRoot) {
-      console.error(`📂 使用配置的项目根目录: ${configProjectRoot}`);
+      console.error(`使用配置的项目根目录: ${configProjectRoot}`);
     } else {
-      console.error(`📂 当前工作目录: ${process.cwd()}`);
+      console.error(`当前工作目录: ${process.cwd()}`);
     }
     
     for (const execPath of possiblePaths) {
       try {
         await fs.access(execPath);
-        console.error(`✅ 找到可执行文件: ${execPath}`);
+        console.error(`找到可执行文件: ${execPath}`);
         return execPath;
       } catch {
         // 静默跳过未找到的路径
       }
     }
 
-    console.error('❌ 未找到可执行文件');
+    console.error('未找到可执行文件');
     return null;
   }
 
@@ -164,7 +164,7 @@ export class BackendManager {
    */
   async startBackend(): Promise<boolean> {
     if (this.process) {
-      console.error('⚠️  后端服务已在运行中');
+      console.error('后端服务已在运行中');
       return true;
     }
 
@@ -172,30 +172,30 @@ export class BackendManager {
     let effectiveDockerMode = this.config.dockerMode;
     
     if (!effectiveDockerMode) {
-      console.error('🔍 正在智能检测部署模式...');
+      console.error('正在智能检测部署模式...');
       const detectedMode = await this.detectDeploymentMode();
       
       switch (detectedMode) {
         case 'docker':
-          console.error('🐳 智能检测：使用Docker部署模式');
+          console.error('智能检测：使用Docker部署模式');
           effectiveDockerMode = true;
           break;
         case 'source':
-          console.error('📦 智能检测：使用源码部署模式');
+          console.error('智能检测：使用源码部署模式');
           effectiveDockerMode = false;
           break;
         case 'unknown':
-          console.error('❓ 无法检测部署模式，使用默认源码模式');
+          console.error('无法检测部署模式，使用默认源码模式');
           effectiveDockerMode = false;
           break;
       }
     } else {
-      console.error(`⚙️  使用配置指定的模式: ${effectiveDockerMode ? 'Docker' : '源码'}`);
+      console.error(`使用配置指定的模式: ${effectiveDockerMode ? 'Docker' : '源码'}`);
     }
 
     // Docker模式处理
     if (effectiveDockerMode) {
-      console.error('🐳 Docker模式已启用，正在检查后端服务连接...');
+      console.error('Docker模式已启用，正在检查后端服务连接...');
       
       // Docker模式下进行重试检查，因为容器可能需要时间启动
       const maxRetries = 3;
@@ -207,18 +207,18 @@ export class BackendManager {
         const isRunning = await this.isBackendRunning();
         if (isRunning) {
           this.httpClient.setSilentMode(false);
-          console.error('✅ Docker模式下后端服务连接成功');
+          console.error('Docker模式下后端服务连接成功');
           return true;
         }
         
         if (i < maxRetries - 1) {
-          console.error(`🔄 连接尝试 ${i + 1}/${maxRetries} 失败，${retryDelay/1000}秒后重试...`);
+          console.error(`连接尝试 ${i + 1}/${maxRetries} 失败，${retryDelay/1000}秒后重试...`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
       
       this.httpClient.setSilentMode(false);
-      console.error('❌ Docker模式下后端服务连接失败');
+      console.error('Docker模式下后端服务连接失败');
       console.error('请确保Docker容器正在运行：');
       console.error('  docker-compose up -d');
       console.error('或检查Docker容器状态：');
@@ -232,14 +232,14 @@ export class BackendManager {
     this.httpClient.setSilentMode(false);
     
     if (isRunning) {
-      console.error('✅ 检测到后端服务已在运行');
+      console.error('检测到后端服务已在运行');
       return true;
     }
 
     // 查找Go可执行文件
     const execPath = await this.findGoExecutable();
     if (!execPath) {
-      console.error('❌ 未找到PanSou后端可执行文件');
+      console.error('未找到PanSou后端可执行文件');
       console.error('如果您使用Docker部署，请在MCP配置中设置 DOCKER_MODE=true');
       console.error('如果您使用源码部署，请确保在项目根目录下存在以下文件之一：');
       console.error('  - pansou.exe / pansou');
@@ -247,7 +247,7 @@ export class BackendManager {
       return false;
     }
 
-    console.error(`🚀 启动后端服务: ${execPath}`);
+    console.error(`启动后端服务: ${execPath}`);
 
     try {
       // 启动Go服务
@@ -260,22 +260,22 @@ export class BackendManager {
 
       // 监听进程事件
       this.process.on('error', (error) => {
-        console.error('❌ 后端服务启动失败:', error.message);
+        console.error('后端服务启动失败:', error.message);
         console.error('错误详情:', error);
         this.process = null;
       });
 
       this.process.on('exit', (code, signal) => {
         if (!this.isShuttingDown) {
-          console.error(`⚠️  后端服务意外退出 (code: ${code}, signal: ${signal})`);
+          console.error(`后端服务意外退出 (code: ${code}, signal: ${signal})`);
         }
         this.process = null;
       });
 
       // 添加进程启动确认
-      console.error(`📋 进程PID: ${this.process.pid}`);
-      console.error(`📂 工作目录: ${path.dirname(execPath)}`);
-      console.error(`⚙️  启动参数: ${execPath}`);
+      console.error(`进程PID: ${this.process.pid}`);
+      console.error(`工作目录: ${path.dirname(execPath)}`);
+      console.error(`启动参数: ${execPath}`);
       
       // 给进程一点时间启动
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -297,7 +297,7 @@ export class BackendManager {
             // 区分错误和正常日志
             if (output.includes('error') || output.includes('Error') || output.includes('ERROR') || 
                 output.includes('panic') || output.includes('fatal') || output.includes('failed')) {
-              console.error('❌ Backend错误:', output);
+              console.error('Backend错误:', output);
             } else {
               console.error('Backend stderr:', output);
             }
@@ -308,18 +308,18 @@ export class BackendManager {
       // 等待服务启动
       const started = await this.waitForBackendReady();
       if (started) {
-        console.error('✅ 后端服务启动成功');
+        console.error('后端服务启动成功');
         
         // 空闲监控已在构造函数中设置
         
         return true;
       } else {
-        console.error('❌ 后端服务启动超时');
+        console.error('后端服务启动超时');
         await this.stopBackend();
         return false;
       }
     } catch (error) {
-      console.error('❌ 启动后端服务时发生错误:', error);
+      console.error('启动后端服务时发生错误:', error);
       return false;
     }
   }
@@ -364,7 +364,7 @@ export class BackendManager {
       return;
     }
 
-    console.error('🛑 正在停止后端服务...');
+    console.error('正在停止后端服务...');
     this.isShuttingDown = true;
 
     try {
@@ -381,7 +381,7 @@ export class BackendManager {
         const timeout = setTimeout(() => {
           // 强制杀死进程
           if (this.process && !this.process.killed) {
-            console.error('⚠️  强制终止后端服务');
+            console.error('强制终止后端服务');
             this.process.kill('SIGKILL');
           }
           resolve();
@@ -393,9 +393,9 @@ export class BackendManager {
         });
       });
 
-      console.error('✅ 后端服务已停止');
+      console.error('后端服务已停止');
     } catch (error) {
-      console.error('❌ 停止后端服务时发生错误:', error);
+      console.error('停止后端服务时发生错误:', error);
     } finally {
       this.process = null;
       this.isShuttingDown = false;
@@ -410,7 +410,7 @@ export class BackendManager {
       clearTimeout(this.shutdownTimeout);
     }
 
-    console.error(`⏰ 将在 ${this.SHUTDOWN_DELAY / 1000} 秒后关闭后端服务`);
+    console.error(`将在 ${this.SHUTDOWN_DELAY / 1000} 秒后关闭后端服务`);
     
     this.shutdownTimeout = setTimeout(async () => {
       await this.stopBackend();

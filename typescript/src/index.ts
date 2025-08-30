@@ -297,7 +297,7 @@ class PanSouMCPServer {
   private setupProcessHandlers(): void {
     // 处理优雅关闭
     const gracefulShutdown = async (signal: string) => {
-      console.error(`\n📡 收到 ${signal} 信号，正在优雅关闭...`);
+      console.error(`\n收到 ${signal} 信号，正在优雅关闭...`);
       
       if (this.config.autoStartBackend) {
         // 延迟关闭后端服务
@@ -325,20 +325,20 @@ class PanSouMCPServer {
   public async start(): Promise<void> {
     // 如果启用了自动启动后端服务
     if (this.config.autoStartBackend) {
-      console.error('🔍 检查后端服务状态...');
+      console.error('检查后端服务状态...');
       
       // 在启动阶段启用静默模式，避免输出网络错误信息
       this.httpClient.setSilentMode(true);
       
       const isRunning = await this.backendManager.isBackendRunning();
       if (!isRunning) {
-        console.error('🚀 自动启动后端服务...');
+        console.error('自动启动后端服务...');
         const started = await this.backendManager.startBackend();
         if (!started) {
-          console.error('❌ 后端服务启动失败，MCP服务器将继续运行但功能可能受限');
+          console.error('后端服务启动失败，MCP服务器将继续运行但功能可能受限');
         }
       } else {
-        console.error('✅ 后端服务已在运行');
+        console.error('后端服务已在运行');
       }
       
       // 启动完成后关闭静默模式
@@ -349,11 +349,11 @@ class PanSouMCPServer {
     await this.server.connect(transport);
     
     // 输出启动信息到stderr，避免干扰MCP通信
-    console.error('🚀 PanSou MCP服务器已启动');
-    console.error(`📡 服务地址: ${this.config.serverUrl}`);
-    console.error(`⏱️  请求超时: ${this.config.requestTimeout}ms`);
-    console.error(`📊 最大结果数: ${this.config.maxResults}`);
-    console.error(`🔧 自动启动后端: ${this.config.autoStartBackend ? '启用' : '禁用'}`);
+    console.error('PanSou MCP服务器已启动');
+    console.error(`服务地址: ${this.config.serverUrl}`);
+    console.error(`请求超时: ${this.config.requestTimeout}ms`);
+    console.error(`最大结果数: ${this.config.maxResults}`);
+    console.error(`自动启动后端: ${this.config.autoStartBackend ? '启用' : '禁用'}`);
     // 空闲监控信息已在BackendManager构造函数中显示
   }
 }
@@ -366,19 +366,19 @@ async function main(): Promise<void> {
     const server = new PanSouMCPServer();
     await server.start();
   } catch (error) {
-    console.error('❌ 服务器启动失败:', error);
+    console.error('服务器启动失败:', error);
     process.exit(1);
   }
 }
 
 // 处理未捕获的异常
 process.on('uncaughtException', (error) => {
-  console.error('❌ 未捕获的异常:', error);
+  console.error('未捕获的异常:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ 未处理的Promise拒绝:', reason);
+  console.error('未处理的Promise拒绝:', reason);
   process.exit(1);
 });
 
