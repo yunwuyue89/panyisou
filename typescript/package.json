@@ -24,16 +24,7 @@
     "search",
     "claude"
   ],
-  "author": "PanSou Team",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/fish2018/pansou-mcp.git"
-  },
-  "homepage": "https://github.com/fish2018/pansou-mcp#readme",
-  "bugs": {
-    "url": "https://github.com/fish2018/pansou-mcp/issues"
-  },
   "engines": {
     "node": ">=18.0.0"
   },

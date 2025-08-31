@@ -14,7 +14,7 @@ const SearchToolArgsSchema = z.object({
   source_type: z.enum(['all', 'tg', 'plugin']).optional().default('all').describe('数据来源类型'),
   force_refresh: z.boolean().optional().default(false).describe('强制刷新缓存'),
   result_type: z.enum(['all', 'results', 'merge']).optional().default('merge').describe('结果类型'),
-  concurrency: z.number().int().positive().optional().describe('并发搜索数量'),
+  concurrency: z.number().int().min(0).optional().describe('并发搜索数量，0表示自动计算'),
   ext_params: z.record(z.any()).optional().describe('扩展参数，传递给插件的自定义参数')
 });
 
@@ -70,7 +70,7 @@ export const searchTool: Tool = {
       },
       concurrency: {
         type: 'number',
-        description: '并发搜索数量，不指定则自动计算'
+        description: '并发搜索数量，0或不指定则自动计算'
       },
       ext_params: {
         type: 'object',
@@ -153,8 +153,8 @@ export async function executeSearchTool(args: unknown, httpClient: HttpClient): 
 function formatSearchResult(result: any, keyword: string, resultType: string): string {
   const { total, results, merged_by_type } = result;
   
-  let output = `🔍 搜索关键词: "${keyword}"\n`;
-  output += `📊 找到 ${total} 个结果\n\n`;
+  let output = `搜索关键词: "${keyword}"\n`;
+  output += `找到 ${total} 个结果\n\n`;
   
   if (resultType === 'merge' && merged_by_type) {
     // 按网盘类型分组显示
@@ -165,11 +165,11 @@ function formatSearchResult(result: any, keyword: string, resultType: string): s
   } else if (resultType === 'all') {
     // 显示所有信息
     if (merged_by_type) {
-      output += "## 📁 按网盘类型分组\n";
+      output += "## 按网盘类型分组\n";
       output += formatMergedResults(merged_by_type);
     }
     if (results && results.length > 0) {
-      output += "\n## 📋 详细结果\n";
+      output += "\n## 详细结果\n";
       output += formatDetailedResults(results.slice(0, 10)); // 限制显示前10个详细结果
     }
   }
@@ -184,36 +184,36 @@ function formatMergedResults(mergedByType: Record<string, any[]>): string {
   let output = '';
   
   const typeNames: Record<string, string> = {
-    'baidu': '🔵 百度网盘',
-    'aliyun': '🟠 阿里云盘',
-    'quark': '🟣 夸克网盘',
-    'tianyi': '🔴 天翼云盘',
-    'uc': '🟡 UC网盘',
-    'mobile': '🟢 移动云盘',
-    '115': '⚫ 115网盘',
-    'pikpak': '🟤 PikPak',
-    'xunlei': '🔶 迅雷网盘',
-    '123': '🟦 123网盘',
-    'magnet': '🧲 磁力链接',
-    'ed2k': '🔗 电驴链接',
-    'others': '📦 其他'
+    'baidu': '百度网盘',
+    'aliyun': '阿里云盘',
+    'quark': '夸克网盘',
+    'tianyi': '天翼云盘',
+    'uc': 'UC网盘',
+    'mobile': '移动云盘',
+    '115': '115网盘',
+    'pikpak': 'PikPak',
+    'xunlei': '迅雷网盘',
+    '123': '123网盘',
+    'magnet': '磁力链接',
+    'ed2k': '电驴链接',
+    'others': '其他'
   };
   
   for (const [type, links] of Object.entries(mergedByType)) {
     if (links && links.length > 0) {
-      const typeName = typeNames[type] || `📁 ${type}`;
+      const typeName = typeNames[type] || `${type}`;
       output += `### ${typeName} (${links.length}个)\n`;
       
       links.slice(0, 5).forEach((link: any, index: number) => {
         output += `${index + 1}. **${link.note || '未知标题'}**\n`;
-        output += `   🔗 链接: ${link.url}\n`;
+        output += `   链接: ${link.url}\n`;
         if (link.password) {
-          output += `   🔑 密码: ${link.password}\n`;
+          output += `   密码: ${link.password}\n`;
         }
         if (link.source) {
-          output += `   📍 来源: ${link.source}\n`;
+          output += `   来源: ${link.source}\n`;
         }
-        output += `   📅 时间: ${new Date(link.datetime).toLocaleString('zh-CN')}\n\n`;
+        output += `   时间: ${new Date(link.datetime).toLocaleString('zh-CN')}\n\n`;
       });
       
       if (links.length > 5) {
@@ -233,20 +233,20 @@ function formatDetailedResults(results: any[]): string {
   
   results.forEach((result: any, index: number) => {
     output += `### ${index + 1}. ${result.title || '未知标题'}\n`;
-    output += `📺 频道: ${result.channel}\n`;
-    output += `📅 时间: ${new Date(result.datetime).toLocaleString('zh-CN')}\n`;
+    output += `频道: ${result.channel}\n`;
+    output += `时间: ${new Date(result.datetime).toLocaleString('zh-CN')}\n`;
     
     if (result.content && result.content !== result.title) {
       const content = result.content.length > 200 ? result.content.substring(0, 200) + '...' : result.content;
-      output += `📝 内容: ${content}\n`;
+      output += `内容: ${content}\n`;
     }
     
     if (result.tags && result.tags.length > 0) {
-      output += `🏷️ 标签: ${result.tags.join(', ')}\n`;
+      output += `标签: ${result.tags.join(', ')}\n`;
     }
     
     if (result.links && result.links.length > 0) {
-      output += `🔗 网盘链接:\n`;
+      output += `网盘链接:\n`;
       result.links.forEach((link: any, linkIndex: number) => {
         output += `   ${linkIndex + 1}. [${link.type.toUpperCase()}] ${link.url}`;
         if (link.password) {
@@ -257,7 +257,7 @@ function formatDetailedResults(results: any[]): string {
     }
     
     if (result.images && result.images.length > 0) {
-      output += `🖼️ 图片: ${result.images.length}张\n`;
+      output += `图片: ${result.images.length}张\n`;
     }
     
     output += '\n';

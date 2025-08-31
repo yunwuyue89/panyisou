@@ -52,7 +52,7 @@ type Response struct {
 // NewSuccessResponse 创建成功响应
 func NewSuccessResponse(data interface{}) Response {
 	return Response{
-		Code:    200,
+		Code:    0,
 		Message: "success",
 		Data:    data,
 	}
