@@ -63,6 +63,7 @@ import (
 	_ "pansou/plugin/yuhuage"
 	_ "pansou/plugin/u3c3"
 	_ "pansou/plugin/clxiong"
+	_ "pansou/plugin/jutoushe"
 )
 
 // 全局缓存写入管理器
