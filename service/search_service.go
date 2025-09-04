@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"pansou/config"
@@ -15,9 +18,18 @@ import (
 	"pansou/util"
 	"pansou/util/cache"
 	"pansou/util/pool"
-	"sync"
-	"regexp"
 )
+
+// normalizeUrl 标准化URL，将URL编码的中文部分解码为中文，用于去重
+func normalizeUrl(rawUrl string) string {
+	// 解码URL中的编码字符
+	decoded, err := url.QueryUnescape(rawUrl)
+	if err != nil {
+		// 如果解码失败，返回原始URL
+		return rawUrl
+	}
+	return decoded
+}
 
 // 全局缓存写入管理器引用（避免循环依赖）
 var globalCacheWriteManager *cache.DelayedBatchWriteManager
@@ -745,11 +757,60 @@ func extractLinkTitlePairsWithoutNewlines(content string) map[string]string {
 	// 结果映射：链接URL -> 对应标题
 	linkTitleMap := make(map[string]string)
 	
-	// 链接正则表达式 - 精确匹配夸克网盘链接
-	linkRegex := regexp.MustCompile(`https?://pan\.quark\.cn/s/[a-zA-Z0-9]+`)
+	// 使用精确的网盘链接正则表达式集合，避免贪婪匹配
+	linkPatterns := []*regexp.Regexp{
+		util.TianyiPanPattern,  // 天翼云盘
+		util.BaiduPanPattern,   // 百度网盘
+		util.QuarkPanPattern,   // 夸克网盘
+		util.AliyunPanPattern,  // 阿里云盘
+		util.UCPanPattern,      // UC网盘
+		util.Pan123Pattern,     // 123网盘
+		util.Pan115Pattern,     // 115网盘
+		util.XunleiPanPattern,  // 迅雷网盘
+	}
 	
-	// 提取所有链接
-	links := linkRegex.FindAllString(content, -1)
+	// 收集所有链接及其位置
+	type linkInfo struct {
+		url string
+		pos int
+	}
+	var allLinks []linkInfo
+	
+	// 使用各个精确正则表达式查找链接
+	for _, pattern := range linkPatterns {
+		matches := pattern.FindAllString(content, -1)
+		for _, match := range matches {
+			pos := strings.Index(content, match)
+			if pos >= 0 {
+				allLinks = append(allLinks, linkInfo{url: match, pos: pos})
+			}
+		}
+	}
+	
+	// 按位置排序
+	for i := 0; i < len(allLinks)-1; i++ {
+		for j := i + 1; j < len(allLinks); j++ {
+			if allLinks[i].pos > allLinks[j].pos {
+				allLinks[i], allLinks[j] = allLinks[j], allLinks[i]
+			}
+		}
+	}
+	
+	// URL标准化和去重
+	uniqueLinks := make(map[string]string) // 标准化URL -> 原始URL
+	var links []string
+	
+	for _, linkInfo := range allLinks {
+		// 标准化URL（将URL编码转换为中文）
+		normalized := normalizeUrl(linkInfo.url)
+		
+		// 如果这个标准化URL还没有见过，则保留
+		if _, exists := uniqueLinks[normalized]; !exists {
+			uniqueLinks[normalized] = linkInfo.url
+			links = append(links, linkInfo.url)
+		}
+	}
+	
 	if len(links) == 0 {
 		return linkTitleMap
 	}
@@ -899,8 +960,20 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 			// 这是没有换行符的情况，尝试直接匹配
 			content := result.Content
 			
-			// 尝试使用"链接："分割内容
-			parts := strings.Split(content, "链接：")
+			// 支持多种网盘链接前缀
+			linkPrefixes := []string{"天翼链接：", "百度链接：", "夸克链接：", "阿里链接：", "UC链接：", "115链接：", "迅雷链接：", "123链接：", "链接："}
+			
+			var parts []string
+			
+			// 尝试找到匹配的前缀
+			for _, prefix := range linkPrefixes {
+				if strings.Contains(content, prefix) {
+					parts = strings.Split(content, prefix)
+					break
+				}
+			}
+			
+			// 如果找到了匹配的前缀并且分割成功
 			if len(parts) > 1 && len(result.Links) <= len(parts)-1 {
 				// 第一部分是第一个标题
 				titles := make([]string, 0, len(parts))
@@ -909,10 +982,12 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 				// 处理每个包含链接的部分，提取标题
 				for i := 1; i < len(parts)-1; i++ {
 					part := parts[i]
-					// 找到链接的结束位置
+					// 找到链接的结束位置，使用更通用的分隔符
 					linkEnd := -1
 					for j, c := range part {
-						if c == ' ' || c == '窃' || c == '东' || c == '迎' || c == '千' || c == '我' || c == '恋' || c == '将' || c == '野' {
+						// 扩展分隔符列表，包含更多可能的字符
+						if c == ' ' || c == '窃' || c == '东' || c == '迎' || c == '千' || c == '我' || c == '恋' || c == '将' || c == '野' || 
+						   c == '合' || c == '集' || c == '天' || c == '翼' || c == '网' || c == '盘' || c == '(' || c == '（' {
 							linkEnd = j
 							break
 						}
@@ -964,9 +1039,12 @@ func mergeResultsByType(results []model.SearchResult, keyword string, cloudTypes
 				}
 			}
 			
-			// 如果关键词不为空，且标题不包含关键词，且不是跳过过滤的插件，则跳过此链接
-			if !skipKeywordFilter && keyword != "" && !strings.Contains(strings.ToLower(title), lowerKeyword) {
-				continue
+			// 关键词过滤：现在我们有了准确的链接-标题对应关系，只需检查每个链接的具体标题
+			if !skipKeywordFilter && keyword != "" {
+				// 只检查链接的具体标题，无论是TG来源还是插件来源
+				if !strings.Contains(strings.ToLower(title), lowerKeyword) {
+					continue
+				}
 			}
 			
 			// 确定数据来源

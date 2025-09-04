@@ -1,6 +1,7 @@
 package util
 
 import (
+	netUrl "net/url"
 	"regexp"
 	"strings"
 )
@@ -13,8 +14,8 @@ var AllPanLinksPattern = regexp.MustCompile(`(?i)(?:(?:magnet:\?xt=urn:btih:[a-z
 var BaiduPanPattern = regexp.MustCompile(`https?://pan\.baidu\.com/s/[a-zA-Z0-9_-]+(?:\?pwd=[a-zA-Z0-9]{4})?`)
 var QuarkPanPattern = regexp.MustCompile(`https?://pan\.quark\.cn/s/[a-zA-Z0-9]+`)
 var XunleiPanPattern = regexp.MustCompile(`https?://pan\.xunlei\.com/s/[a-zA-Z0-9]+(?:\?pwd=[a-zA-Z0-9]+)?(?:#)?`)
-// 添加天翼云盘链接正则表达式
-var TianyiPanPattern = regexp.MustCompile(`https?://cloud\.189\.cn/t/[a-zA-Z0-9]+`)
+// 添加天翼云盘链接正则表达式 - 精确匹配，支持URL编码的访问码
+var TianyiPanPattern = regexp.MustCompile(`https?://cloud\.189\.cn/t/[a-zA-Z0-9]+(?:%[0-9A-Fa-f]{2})*(?:（[^）]*）)?`)
 // 添加UC网盘链接正则表达式
 var UCPanPattern = regexp.MustCompile(`https?://drive\.uc\.cn/s/[a-zA-Z0-9]+(?:\?public=\d)?`)
 // 添加123网盘链接正则表达式
@@ -160,7 +161,12 @@ func CleanTianyiPanURL(url string) string {
 			
 			// 如果找到了结束标记，截取到结束标记位置
 			if minEndIdx < len(url) {
-				return url[:minEndIdx]
+				url = url[:minEndIdx]
+			}
+			
+			// 标准化URL：将URL编码转换为中文，用于去重
+			if decoded, err := netUrl.QueryUnescape(url); err == nil {
+				url = decoded
 			}
 		}
 	}
@@ -400,6 +406,16 @@ func normalizeAliyunPanURL(url string, password string) string {
 
 // ExtractPassword 提取链接密码
 func ExtractPassword(content, url string) string {
+	// 特殊处理天翼云盘URL中的访问码
+	if strings.Contains(url, "cloud.189.cn") {
+		// 天翼云盘访问码格式：（访问码：xxxx）或者URL编码形式
+		tianyiPasswordPattern := regexp.MustCompile(`(?:（访问码：|%EF%BC%88%E8%AE%BF%E9%97%AE%E7%A0%81%EF%BC%9A)([a-zA-Z0-9]+)(?:）|%EF%BC%89)`)
+		tianyiMatches := tianyiPasswordPattern.FindStringSubmatch(url)
+		if len(tianyiMatches) > 1 {
+			return tianyiMatches[1]
+		}
+	}
+	
 	// 先从URL中提取密码
 	matches := UrlPasswordPattern.FindStringSubmatch(url)
 	if len(matches) > 1 {

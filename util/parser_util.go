@@ -1,12 +1,24 @@
 package util
 
 import (
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"pansou/model"
 )
+
+// normalizeUrl 标准化URL，将URL编码的中文部分解码为中文，用于去重
+func normalizeUrl(rawUrl string) string {
+	// 解码URL中的编码字符
+	decoded, err := url.QueryUnescape(rawUrl)
+	if err != nil {
+		// 如果解码失败，返回原始URL
+		return rawUrl
+	}
+	return decoded
+}
 
 // isSupportedLink 检查链接是否为支持的网盘链接
 func isSupportedLink(url string) bool {
@@ -282,11 +294,13 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 					}
 				} else {
 					// 非特殊处理的网盘链接直接添加
-					if !foundLinks[href] {
-						foundLinks[href] = true
+					// 使用标准化的URL进行去重
+					normalizedHref := normalizeUrl(href)
+					if !foundLinks[normalizedHref] {
+						foundLinks[normalizedHref] = true
 						links = append(links, model.Link{
 							Type:     linkType,
-							URL:      href,
+							URL:      normalizedHref,  // 使用标准化的URL
 							Password: password,
 						})
 					}
@@ -378,11 +392,13 @@ func ParseSearchResults(html string, channel string) ([]model.SearchResult, stri
 				}
 			} else {
 				// 非特殊处理的网盘链接直接添加
-				if !foundLinks[linkURL] {
-					foundLinks[linkURL] = true
+				// 使用标准化的URL进行去重
+				normalizedLinkURL := normalizeUrl(linkURL)
+				if !foundLinks[normalizedLinkURL] {
+					foundLinks[normalizedLinkURL] = true
 					links = append(links, model.Link{
 						Type:     linkType,
-						URL:      linkURL,
+						URL:      normalizedLinkURL,  // 使用标准化的URL
 						Password: password,
 					})
 				}
