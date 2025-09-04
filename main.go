@@ -25,7 +25,6 @@ import (
 
 	// 以下是插件的空导入，用于触发各插件的init函数，实现自动注册
 	// 添加新插件时，只需在此处添加对应的导入语句即可
-	_ "pansou/plugin/hdr4k"
 	_ "pansou/plugin/hunhepan"
 	_ "pansou/plugin/jikepan"
 	_ "pansou/plugin/panwiki"
@@ -59,11 +58,11 @@ import (
 	_ "pansou/plugin/xys"
 	_ "pansou/plugin/ddys"
 	_ "pansou/plugin/hdmoli"
-	_ "pansou/plugin/javdb"
 	_ "pansou/plugin/yuhuage"
 	_ "pansou/plugin/u3c3"
 	_ "pansou/plugin/clxiong"
 	_ "pansou/plugin/jutoushe"
+	_ "pansou/plugin/sdso"
 )
 
 // 全局缓存写入管理器

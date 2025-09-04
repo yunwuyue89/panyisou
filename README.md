@@ -29,7 +29,7 @@ PanSou 还提供了一个基于 [Model Context Protocol (MCP)](https://modelcont
 ### 使用Docker部署
 
 
-#### 前后端集成版
+#### **1、前后端集成版**
 
 ##### 直接使用Docker命令
 
@@ -51,7 +51,7 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-#### 纯后端API
+#### **2、纯后端API版**
 
 ##### 直接使用Docker命令
 
