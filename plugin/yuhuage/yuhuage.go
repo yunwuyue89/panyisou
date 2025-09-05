@@ -328,7 +328,7 @@ func (p *YuhuagePlugin) parseDetailLinks(html string) []model.Link {
 			}
 			links = append(links, model.Link{
 				URL:  href,
-				Type: "thunder",
+				Type: "others",
 			})
 		}
 	})

@@ -51,9 +51,6 @@ var (
 	tianyiLinkRegex    = regexp.MustCompile(`https?://cloud\.189\.cn/t/[0-9a-zA-Z]+`)
 	link115Regex       = regexp.MustCompile(`https?://115\.com/s/[0-9a-zA-Z]+`)
 	mobileLinkRegex    = regexp.MustCompile(`https?://caiyun\.feixin\.10086\.cn/[0-9a-zA-Z]+`)
-	weiyunLinkRegex    = regexp.MustCompile(`https?://share\.weiyun\.com/[0-9a-zA-Z]+`)
-	lanzouLinkRegex    = regexp.MustCompile(`https?://(www\.)?(lanzou[uixys]*|lan[zs]o[ux])\.(com|net|org)/[0-9a-zA-Z]+`)
-	jianguoyunLinkRegex = regexp.MustCompile(`https?://(www\.)?jianguoyun\.com/p/[0-9a-zA-Z]+`)
 	link123Regex       = regexp.MustCompile(`https?://123pan\.com/s/[0-9a-zA-Z]+`)
 	pikpakLinkRegex    = regexp.MustCompile(`https?://mypikpak\.com/s/[0-9a-zA-Z]+`)
 	magnetLinkRegex    = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}`)
@@ -317,12 +314,6 @@ func (p *OugeAsyncPlugin) mapCloudType(apiType, url string) string {
 		return "115"
 	case "MB":
 		return "mobile"
-	case "WY":
-		return "weiyun"
-	case "LZ":
-		return "lanzou"
-	case "JGY":
-		return "jianguoyun"
 	case "123":
 		return "123"
 	case "PK":
@@ -352,9 +343,6 @@ func (p *OugeAsyncPlugin) isValidNetworkDriveURL(url string) bool {
 		   tianyiLinkRegex.MatchString(url) ||
 		   link115Regex.MatchString(url) ||
 		   mobileLinkRegex.MatchString(url) ||
-		   weiyunLinkRegex.MatchString(url) ||
-		   lanzouLinkRegex.MatchString(url) ||
-		   jianguoyunLinkRegex.MatchString(url) ||
 		   link123Regex.MatchString(url) ||
 		   pikpakLinkRegex.MatchString(url) ||
 		   magnetLinkRegex.MatchString(url) ||
@@ -380,12 +368,6 @@ func (p *OugeAsyncPlugin) determineLinkType(url string) string {
 		return "115"
 	case mobileLinkRegex.MatchString(url):
 		return "mobile"
-	case weiyunLinkRegex.MatchString(url):
-		return "weiyun"
-	case lanzouLinkRegex.MatchString(url):
-		return "lanzou"
-	case jianguoyunLinkRegex.MatchString(url):
-		return "jianguoyun"
 	case link123Regex.MatchString(url):
 		return "123"
 	case pikpakLinkRegex.MatchString(url):

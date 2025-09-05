@@ -177,18 +177,10 @@ func (p *JikepanAsyncV2Plugin) convertLinkType(service string) string {
 		return "115"
 	case "123":
 		return "123"
-	case "weiyun":
-		return "weiyun"
 	case "pikpak":
 		return "pikpak"
-	case "lanzou":
-		return "lanzou"
-	case "jianguoyun":
-		return "jianguoyun"
 	case "caiyun":
 		return "mobile"
-	case "chengtong":
-		return "chengtong"
 	case "ed2k":
 		return "ed2k"
 	case "magnet":

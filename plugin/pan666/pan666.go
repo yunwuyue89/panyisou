@@ -321,10 +321,6 @@ func extractLinks(content string) []model.Link {
 	baiduLinks := extractLinksByPattern(content, "链接: https://pan.baidu.com", "提取码:", "baidu")
 	allLinks = append(allLinks, baiduLinks...)
 	
-	// 提取蓝奏云链接
-	lanzouLinks := extractLinksByPattern(content, "https://[a-zA-Z0-9-]+.lanzou", "密码:", "lanzou")
-	allLinks = append(allLinks, lanzouLinks...)
-	
 	// 提取阿里云盘链接
 	aliyunLinks := extractLinksByPattern(content, "https://www.aliyundrive.com/s/", "提取码:", "aliyun")
 	allLinks = append(allLinks, aliyunLinks...)
@@ -515,21 +511,6 @@ func extractLinksFromText(content string) []model.Link {
 			}
 		}
 		
-		// 检查蓝奏云
-		if strings.Contains(line, "lanzou") {
-			url := extractURLFromText(line)
-			if url != "" {
-				linkInfos = append(linkInfos, struct {
-					link     model.Link
-					position int
-					category string
-				}{
-					link:     model.Link{URL: url, Type: "lanzou"},
-					position: i,
-					category: "lanzou",
-				})
-			}
-		}
 		
 		// 检查天翼云盘
 		if strings.Contains(line, "cloud.189.cn") {
@@ -596,8 +577,6 @@ func extractLinksFromText(content string) []model.Link {
 			if linkInfos[i].category == "baidu" && (pwInfo.keyword == "提取码" || pwInfo.keyword == "密码") {
 				match = true
 			} else if linkInfos[i].category == "aliyun" && (pwInfo.keyword == "提取码" || pwInfo.keyword == "密码") {
-				match = true
-			} else if linkInfos[i].category == "lanzou" && pwInfo.keyword == "密码" {
 				match = true
 			} else if linkInfos[i].category == "tianyi" && (pwInfo.keyword == "访问码" || pwInfo.keyword == "密码") {
 				match = true

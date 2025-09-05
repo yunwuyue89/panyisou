@@ -496,12 +496,6 @@ func (p *SusuAsyncPlugin) determineLinkType(url, name string) string {
 			linkType = "uc"
 	case strings.Contains(lowerURL, "caiyun.139.com"):
 		linkType = "mobile"
-	case strings.Contains(lowerURL, "share.weiyun.com"):
-		linkType = "weiyun"
-	case strings.Contains(lowerURL, "lanzou"):
-		linkType = "lanzou"
-	case strings.Contains(lowerURL, "jianguoyun.com"):
-		linkType = "jianguoyun"
 	case strings.Contains(lowerURL, "123pan.com"):
 		linkType = "123"
 	case strings.Contains(lowerURL, "mypikpak.com"):
@@ -525,12 +519,6 @@ func (p *SusuAsyncPlugin) determineLinkType(url, name string) string {
 			linkType = "uc"
 		case strings.Contains(lowerName, "移动") || strings.Contains(lowerName, "彩云"):
 			linkType = "mobile"
-		case strings.Contains(lowerName, "微云"):
-			linkType = "weiyun"
-		case strings.Contains(lowerName, "蓝奏"):
-			linkType = "lanzou"
-		case strings.Contains(lowerName, "坚果"):
-			linkType = "jianguoyun"
 		case strings.Contains(lowerName, "123"):
 			linkType = "123"
 		case strings.Contains(lowerName, "pikpak"):

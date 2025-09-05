@@ -51,9 +51,6 @@ var (
 	tianyiLinkRegex    = regexp.MustCompile(`https?://cloud\.189\.cn/t/[0-9a-zA-Z]+`)
 	link115Regex       = regexp.MustCompile(`https?://115\.com/s/[0-9a-zA-Z]+`)
 	mobileLinkRegex    = regexp.MustCompile(`https?://caiyun\.feixin\.10086\.cn/[0-9a-zA-Z]+`)
-	weiyunLinkRegex    = regexp.MustCompile(`https?://share\.weiyun\.com/[0-9a-zA-Z]+`)
-	lanzouLinkRegex    = regexp.MustCompile(`https?://(www\.)?(lanzou[uixys]*|lan[zs]o[ux])\.(com|net|org)/[0-9a-zA-Z]+`)
-	jianguoyunLinkRegex = regexp.MustCompile(`https?://(www\.)?jianguoyun\.com/p/[0-9a-zA-Z]+`)
 	link123Regex       = regexp.MustCompile(`https?://123pan\.com/s/[0-9a-zA-Z]+`)
 	pikpakLinkRegex    = regexp.MustCompile(`https?://mypikpak\.com/s/[0-9a-zA-Z]+`)
 	magnetLinkRegex    = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}`)
@@ -345,18 +342,6 @@ func (p *WanouAsyncPlugin) determineLinkTypeOptimized(apiType, url string) strin
 		if mobileLinkRegex.MatchString(url) {
 			return "mobile"
 		}
-	case "WY":
-		if weiyunLinkRegex.MatchString(url) {
-			return "weiyun"
-		}
-	case "LZ":
-		if lanzouLinkRegex.MatchString(url) {
-			return "lanzou"
-		}
-	case "JGY":
-		if jianguoyunLinkRegex.MatchString(url) {
-			return "jianguoyun"
-		}
 	case "123":
 		if link123Regex.MatchString(url) {
 			return "123"
@@ -383,12 +368,6 @@ func (p *WanouAsyncPlugin) determineLinkTypeOptimized(apiType, url string) strin
 		return "115"
 	case mobileLinkRegex.MatchString(url):
 		return "mobile"
-	case weiyunLinkRegex.MatchString(url):
-		return "weiyun"
-	case lanzouLinkRegex.MatchString(url):
-		return "lanzou"
-	case jianguoyunLinkRegex.MatchString(url):
-		return "jianguoyun"
 	case link123Regex.MatchString(url):
 		return "123"
 	case pikpakLinkRegex.MatchString(url):
@@ -398,7 +377,7 @@ func (p *WanouAsyncPlugin) determineLinkTypeOptimized(apiType, url string) strin
 	case ed2kLinkRegex.MatchString(url):
 		return "ed2k"
 	case quarkLinkRegex.MatchString(url):
-		return "quark"  // quark放到最后，因为已排除
+		return "quark" 
 	default:
 		return "" // 不支持的类型
 	}
@@ -423,12 +402,6 @@ func (p *WanouAsyncPlugin) determineLinkType(url string) string {
 		return "115"
 	case mobileLinkRegex.MatchString(url):
 		return "mobile"
-	case weiyunLinkRegex.MatchString(url):
-		return "weiyun"
-	case lanzouLinkRegex.MatchString(url):
-		return "lanzou"
-	case jianguoyunLinkRegex.MatchString(url):
-		return "jianguoyun"
 	case link123Regex.MatchString(url):
 		return "123"
 	case pikpakLinkRegex.MatchString(url):

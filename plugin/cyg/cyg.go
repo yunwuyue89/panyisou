@@ -28,9 +28,6 @@ var (
 	tianyiLinkRegex     = regexp.MustCompile(`https?://cloud\.189\.cn/t/[0-9a-zA-Z]+`)
 	link115Regex        = regexp.MustCompile(`https?://115\.com/s/[0-9a-zA-Z]+`)
 	mobileLinkRegex     = regexp.MustCompile(`https?://(caiyun\.feixin\.10086\.cn|caiyun\.139\.com|yun\.139\.com|cloud\.139\.com|pan\.139\.com)/.*`)
-	weiyunLinkRegex     = regexp.MustCompile(`https?://share\.weiyun\.com/[0-9a-zA-Z]+`)
-	lanzouLinkRegex     = regexp.MustCompile(`https?://(www\.)?(lanzou[uixys]*|lan[zs]o[ux])\.(com|net|org)/[0-9a-zA-Z]+`)
-	jianguoyunLinkRegex = regexp.MustCompile(`https?://(www\.)?jianguoyun\.com/p/[0-9a-zA-Z]+`)
 	link123Regex        = regexp.MustCompile(`https?://123pan\.com/s/[0-9a-zA-Z]+`)
 	pikpakLinkRegex     = regexp.MustCompile(`https?://mypikpak\.com/s/[0-9a-zA-Z]+`)
 	magnetLinkRegex     = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}`)
@@ -314,12 +311,6 @@ func (p *CygPlugin) determineCloudTypeByURL(url string) string {
 		return "115"
 	case mobileLinkRegex.MatchString(url):
 		return "mobile"
-	case weiyunLinkRegex.MatchString(url):
-		return "weiyun"
-	case lanzouLinkRegex.MatchString(url):
-		return "lanzou"
-	case jianguoyunLinkRegex.MatchString(url):
-		return "jianguoyun"
 	case link123Regex.MatchString(url):
 		return "123"
 	case pikpakLinkRegex.MatchString(url):
@@ -352,12 +343,6 @@ func (p *CygPlugin) determineCloudType(name string) string {
 		return "115"
 	case "移动云盘", "移动", "mobile", "和彩云", "139云盘", "139", "中国移动云盘":
 		return "mobile"
-	case "微云", "腾讯微云", "weiyun":
-		return "weiyun"
-	case "蓝奏云", "蓝奏", "lanzou":
-		return "lanzou"
-	case "坚果云", "jianguoyun":
-		return "jianguoyun"
 	case "123网盘", "123pan", "123":
 		return "123"
 	case "pikpak", "pikpak网盘":

@@ -312,19 +312,6 @@ func (p *U3c3Plugin) parseSearchResults(html string) ([]model.SearchResult, erro
 			}
 		})
 
-		// 种子文件链接
-		linkCell.Find("a[href$='.torrent']").Each(func(j int, link *goquery.Selection) {
-			href, exists := link.Attr("href")
-			if exists && href != "" {
-				if !strings.HasPrefix(href, "http") {
-					href = BaseURL + href
-				}
-				links = append(links, model.Link{
-					URL:  href,
-					Type: "torrent",
-				})
-			}
-		})
 
 		// 提取文件大小
 		sizeText := strings.TrimSpace(s.Find("td:nth-child(4)").Text())
