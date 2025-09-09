@@ -64,6 +64,7 @@ import (
 	_ "pansou/plugin/jutoushe"
 	_ "pansou/plugin/sdso"
 	_ "pansou/plugin/xiaoji"
+	_ "pansou/plugin/xdyh"
 )
 
 // 全局缓存写入管理器
