@@ -10,6 +10,8 @@ services:
     environment:
       - PORT=8888
       - CHANNELS=tgsearchers3,SharePanBaidu,yunpanxunlei,tianyifc,BaiduCloudDisk
+      # 必须指定启用的插件，多个插件用逗号分隔
+      - ENABLED_PLUGINS=labi,zhizhen,shandian,duoduo,muou,wanou
       - CACHE_ENABLED=true
       - CACHE_PATH=/app/cache
       - CACHE_MAX_SIZE=100

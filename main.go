@@ -25,6 +25,8 @@ import (
 
 	// 以下是插件的空导入，用于触发各插件的init函数，实现自动注册
 	// 添加新插件时，只需在此处添加对应的导入语句即可
+	// _ "pansou/plugin/hdr4k"
+	// _ "pansou/plugin/pan666"
 	_ "pansou/plugin/hunhepan"
 	_ "pansou/plugin/jikepan"
 	_ "pansou/plugin/panwiki"
@@ -60,6 +62,7 @@ import (
 	_ "pansou/plugin/hdmoli"
 	_ "pansou/plugin/yuhuage"
 	_ "pansou/plugin/u3c3"
+	_ "pansou/plugin/javdb"
 	_ "pansou/plugin/clxiong"
 	_ "pansou/plugin/jutoushe"
 	_ "pansou/plugin/sdso"
@@ -321,12 +324,8 @@ func printServiceInfo(port string, pluginManager *plugin.PluginManager) {
 	if config.AppConfig.AsyncPluginEnabled {
 		plugins := pluginManager.GetPlugins()
 		if len(plugins) > 0 {
-			// 显示是否有特定的插件过滤
-			if len(config.AppConfig.EnabledPlugins) > 0 {
-				fmt.Printf("已启用指定插件 (%d个):\n", len(plugins))
-			} else {
-				fmt.Printf("已加载所有插件 (%d个):\n", len(plugins))
-			}
+			// 根据新逻辑，只有指定了具体插件才会加载插件
+			fmt.Printf("已启用指定插件 (%d个):\n", len(plugins))
 
 			// 按优先级排序（优先级数字越小越靠前）
 			sort.Slice(plugins, func(i, j int) bool {
@@ -341,10 +340,13 @@ func printServiceInfo(port string, pluginManager *plugin.PluginManager) {
 				fmt.Printf("  - %s (优先级: %d)\n", p.Name(), p.Priority())
 			}
 		} else {
-			if len(config.AppConfig.EnabledPlugins) > 0 {
+			// 区分不同的情况
+			if config.AppConfig.EnabledPlugins == nil {
+				fmt.Println("未设置插件列表 (ENABLED_PLUGINS)，未加载任何插件")
+			} else if len(config.AppConfig.EnabledPlugins) > 0 {
 				fmt.Printf("未找到指定的插件: %s\n", strings.Join(config.AppConfig.EnabledPlugins, ", "))
 			} else {
-				fmt.Println("未加载到任何插件")
+				fmt.Println("插件列表为空 (ENABLED_PLUGINS=\"\")，未加载任何插件")
 			}
 		}
 	}

@@ -95,6 +95,7 @@ cd pansou
 | **PORT** | 服务端口 | `8888` | 修改服务监听端口 |
 | **PROXY** | SOCKS5代理 | 无 | 如：`socks5://127.0.0.1:1080` |
 | **CHANNELS** | 默认搜索的TG频道 | `tgsearchers3` | 多个频道用逗号分隔 |
+| **ENABLED_PLUGINS** | 指定启用插件，多个插件用逗号分隔 | 无 | 必须显式指定 |
 
 #### 🔧 高级配置（默认值即可）
 
@@ -119,7 +120,6 @@ cd pansou
 | ASYNC_MAX_BACKGROUND_TASKS | 最大后台任务数量 | 工作者数×5 |
 | ASYNC_CACHE_TTL_HOURS | 异步缓存有效期(小时) | `1` |
 | ASYNC_PLUGIN_ENABLED | 异步插件是否启用 | `true` |
-| ENABLED_PLUGINS | 指定启用插件，多个插件用逗号分隔 | 所有 |
 | HTTP_READ_TIMEOUT | HTTP读取超时(秒) | 自动计算 |
 | HTTP_WRITE_TIMEOUT | HTTP写入超时(秒) | 自动计算 |
 | HTTP_IDLE_TIMEOUT | HTTP空闲超时(秒) | `120` |
@@ -146,7 +146,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -extldflags '-sta
 
 ```
 [program:pansou]
-environment=PORT=8888,CHANNELS="tgsearchers3,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,bdwpzhpd,ysxb48,jdjdn1111,yggpan,MCPH086,zaihuayun,Q66Share,NewAliPan,ypquark,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,leoziyuan"
+environment=PORT=8888,CHANNELS="tgsearchers3,yunpanxunlei,tianyifc,BaiduCloudDisk,txtyzy,peccxinpd,gotopan,xingqiump4,yunpanqk,PanjClub,kkxlzy,baicaoZY,MCPH01,share_aliyun,bdwpzhpd,ysxb48,jdjdn1111,yggpan,MCPH086,zaihuayun,Q66Share,NewAliPan,ypquark,Oscar_4Kmovies,ucwpzy,alyp_TV,alyp_4K_Movies,shareAliyun,alyp_1,dianyingshare,Quark_Movies,XiangxiuNBB,NewQuark,ydypzyfx,kuakeyun,ucquark,xx123pan,yingshifenxiang123,zyfb123,tyypzhpd,tianyirigeng,cloudtianyi,hdhhd21,Lsp115,oneonefivewpfx,Maidanglaocom,qixingzhenren,taoxgzy,tgsearchers115,Channel_Shares_115,tyysypzypd,vip115hot,wp123zy,yunpan139,yunpan189,yunpanuc,yydf_hzl,alyp_Animation,alyp_JLP,leoziyuan",ENABLED_PLUGINS="labi,zhizhen,shandian,duoduo,muou"
 command=/home/work/pansou/pansou
 directory=/home/work/pansou
 autostart=true

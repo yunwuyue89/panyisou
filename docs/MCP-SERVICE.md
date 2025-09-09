@@ -181,7 +181,8 @@ node .\typescript\dist\index.js
         "BACKEND_STARTUP_TIMEOUT": "30000",
         "IDLE_TIMEOUT": "300000",
         "ENABLE_IDLE_SHUTDOWN": "true",
-        "PROJECT_ROOT_PATH": "C:\\full\\path\\to\\your\\project"
+        "PROJECT_ROOT_PATH": "C:\\full\\path\\to\\your\\project",
+        "ENABLED_PLUGINS": "labi,zhizhen,shandian,duoduo,muou,wanou"
       }
     }
   }
@@ -191,6 +192,7 @@ node .\typescript\dist\index.js
 **注意**：
 - 请将 `C:\\full\\path\\to\\your\\project` 替换为您项目实际的完整路径
 - 如需强制指定部署模式，可修改 `DOCKER_MODE` 和 `AUTO_START_BACKEND` 参数
+- **重要**：从当前版本开始，必须通过 `ENABLED_PLUGINS` 显式指定要启用的插件，否则不会启用任何插件
 
 ### 4. 启动 MCP 服务并开始使用
 
@@ -309,6 +311,7 @@ MCP 服务通过工具调用接收参数。以下是主要工具及其支持的�
 | `MAX_RESULTS`          | （内部使用，限制处理结果数量）                             | `100`                     |
 | `DEFAULT_CHANNELS`     | 默认搜索的 Telegram 频道列表（逗号分隔）。                 | `""` (使用后端默认)       |
 | `DEFAULT_PLUGINS`      | 默认使用的搜索插件列表（逗号分隔）。                       | `""` (使用后端默认或所有) |
+| `ENABLED_PLUGINS`      | 指定后端启用的插件列表（逗号分隔），必须显式指定。         | `""` (需要显式设置)       |
 | `DEFAULT_CLOUD_TYPES`  | 默认的网盘类型过滤器（逗号分隔）。                         | `""` (无过滤)             |
 | `AUTO_START_BACKEND`   | 是否在 MCP 服务启动时自动尝试启动后端服务。                | `true`                    |
 | `DOCKER_MODE`          | 部署模式控制。设置为 `true` 强制使用 Docker 模式；设置为 `false` 或未设置时启用智能检测。智能检测将自动识别 Docker 容器、源码部署或运行中的服务。 | `false` (智能检测)        |

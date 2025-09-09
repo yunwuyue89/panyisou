@@ -300,11 +300,20 @@ func getAsyncPluginEnabled() bool {
 	return enabled != "false" && enabled != "0"
 }
 
-// 从环境变量获取启用的插件列表，如果未设置则返回空切片（表示启用所有）
+// 从环境变量获取启用的插件列表
+// 返回nil表示未设置环境变量（不启用任何插件）
+// 返回[]string{}表示设置为空（不启用任何插件）
+// 返回具体列表表示启用指定插件
 func getEnabledPlugins() []string {
-	plugins := os.Getenv("ENABLED_PLUGINS")
+	plugins, exists := os.LookupEnv("ENABLED_PLUGINS")
+	if !exists {
+		// 未设置环境变量时返回nil，表示不启用任何插件
+		return nil
+	}
+	
 	if plugins == "" {
-		return []string{} // 空切片表示启用所有插件
+		// 设置为空字符串，也表示不启用任何插件
+		return []string{}
 	}
 	
 	// 按逗号分割插件名

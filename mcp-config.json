@@ -16,7 +16,8 @@
         "BACKEND_STARTUP_TIMEOUT": "30000",
         "IDLE_TIMEOUT": "300000",
         "ENABLE_IDLE_SHUTDOWN": "true",
-        "PROJECT_ROOT_PATH": "C:\\full\\path\\to\\your\\project"
+        "PROJECT_ROOT_PATH": "C:\\full\\path\\to\\your\\project",
+        "ENABLED_PLUGINS": "labi,zhizhen,shandian,duoduo,muou,wanou"
       }
     }
   },
@@ -43,7 +44,8 @@
       "BACKEND_STARTUP_TIMEOUT": "后端服务启动超时（毫秒），默认30000",
       "IDLE_TIMEOUT": "空闲超时时间（毫秒），默认300000（5分钟）",
       "ENABLE_IDLE_SHUTDOWN": "是否启用空闲自动关闭，默认true",
-      "PROJECT_ROOT_PATH": "项目根目录路径，用于查找Go可执行文件"
+      "PROJECT_ROOT_PATH": "项目根目录路径，用于查找Go可执行文件",
+      "ENABLED_PLUGINS": "指定启用的插件列表，多个插件用逗号分隔，必须显式指定"
     },
     "使用示例": {
       "自动模式": "默认配置，自动检测部署方式",
