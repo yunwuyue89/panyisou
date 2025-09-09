@@ -33,10 +33,10 @@ PanSou 还提供了一个基于 [Model Context Protocol (MCP)](https://modelcont
 
 ##### 直接使用Docker命令
 
-一键启动，开箱即用，无需任何配置
+一键启动，开箱即用
 
 ```
-docker run -d --name pansou -p 80:80 ghcr.io/fish2018/pansou-web
+docker run -d --name pansou -p 80:80 -e ENABLED_PLUGINS="labi,zhizhen,shandian,duoduo,muou,wanou" ghcr.io/fish2018/pansou-web
 ```
 
 ##### 使用Docker Compose（推荐）
@@ -56,7 +56,7 @@ docker-compose logs -f
 ##### 直接使用Docker命令
 
 ```bash
-docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache -e CHANNELS="tgsearchers3,xxx" ghcr.io/fish2018/pansou:latest
+docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache -e CHANNELS="tgsearchers3,xxx" -e ENABLED_PLUGINS="labi,zhizhen,shandian,duoduo,muou,wanou" ghcr.io/fish2018/pansou:latest
 ```
 
 ##### 使用Docker Compose（推荐）
@@ -88,7 +88,7 @@ cd pansou
 
 2. 配置环境变量（可选）
 
-#### 🚀 基础配置
+#### 基础配置
 
 | 环境变量 | 描述 | 默认值 | 说明 |
 |----------|------|--------|------|
@@ -97,7 +97,7 @@ cd pansou
 | **CHANNELS** | 默认搜索的TG频道 | `tgsearchers3` | 多个频道用逗号分隔 |
 | **ENABLED_PLUGINS** | 指定启用插件，多个插件用逗号分隔 | 无 | 必须显式指定 |
 
-#### 🔧 高级配置（默认值即可）
+#### 高级配置（默认值即可）
 
 <details>
 <summary>点击展开高级配置选项（通常不需要修改）</summary>
