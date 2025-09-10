@@ -328,7 +328,7 @@ func (p *MiaosouPlugin) determineCloudType(from string) string {
 		return "baidu"
 	case "uc":
 		return "uc"
-	case "aliyun":
+	case "ali":
 		return "aliyun"
 	case "xunlei":
 		return "xunlei"
