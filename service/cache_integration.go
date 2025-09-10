@@ -40,7 +40,7 @@ func NewCacheWriteIntegration(mainCache *cache.EnhancedTwoLevelCache) (*CacheWri
 	
 	integration.initialized = true
 	
-	fmt.Printf("✅ [缓存写入集成] 初始化完成\n")
+	fmt.Printf("[缓存写入集成] 初始化完成\n")
 	return integration, nil
 }
 

@@ -135,7 +135,7 @@ func (c *DiskCache) Set(key string, data []byte, ttl time.Duration) error {
 	filename := c.getFilename(key)
 	filePath := filepath.Join(c.path, filename)
 
-	// 🔥 确保目录存在（防止外部删除缓存目录）
+	// 确保目录存在（防止外部删除缓存目录）
 	if err := os.MkdirAll(c.path, 0755); err != nil {
 		return fmt.Errorf("创建缓存目录失败: %v", err)
 	}

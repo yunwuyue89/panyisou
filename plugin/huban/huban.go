@@ -176,7 +176,7 @@ func (p *HubanAsyncPlugin) searchImpl(client *http.Client, keyword string, ext m
 			return results, nil
 		} else if i == 0 {
 			// 第一个域名失败，记录日志但继续尝试第二个
-			fmt.Printf("[%s] 域名1失败，尝试域名2: %v\n", p.Name(), err)
+			// fmt.Printf("[%s] 域名1失败，尝试域名2: %v\n", p.Name(), err)
 		}
 	}
 	
@@ -209,10 +209,7 @@ func (p *HubanAsyncPlugin) tryRequest(searchURL string, client *http.Client) ([]
 	defer resp.Body.Close()
 	
 	// 解析JSON响应
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
+	body, _ := io.ReadAll(resp.Body)
 	
 	var apiResponse HubanAPIResponse
 	if err := json.Unmarshal(body, &apiResponse); err != nil {

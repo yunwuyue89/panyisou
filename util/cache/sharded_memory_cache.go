@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// 🔥 全局清理任务相关变量（单例模式）
+// 全局清理任务相关变量（单例模式）
 var (
 	globalCleanupTicker *time.Ticker
 	globalCleanupOnce   sync.Once
@@ -16,7 +16,7 @@ var (
 	cacheRegistryMutex  sync.RWMutex
 )
 
-// 🔥 清理目标接口
+// 清理目标接口
 type cleanupTarget interface {
 	CleanExpired()
 }
@@ -45,8 +45,8 @@ type ShardedMemoryCache struct {
 	maxSize   int64
 	itemsPerShard int
 	sizePerShard  int64
-	diskCache     *ShardedDiskCache // 🔥 新增：磁盘缓存引用
-	diskCacheMutex sync.RWMutex     // 🔥 新增：磁盘缓存引用的保护锁
+	diskCache     *ShardedDiskCache // 磁盘缓存引用
+	diskCacheMutex sync.RWMutex     // 磁盘缓存引用的保护锁
 }
 
 // 创建新的分片内存缓存
@@ -237,7 +237,7 @@ func (c *ShardedMemoryCache) evictFromShard(shard *memoryCacheShard) {
 			go func(key string, data []byte, expiry time.Time) {
 				ttl := time.Until(expiry)
 				if ttl > 0 {
-					diskCache.Set(key, data, ttl) // 🔥 保持相同TTL
+					diskCache.Set(key, data, ttl) // 保持相同TTL
 				}
 			}(oldestKey, oldestItem.data, oldestItem.expiry)
 		}
@@ -302,7 +302,7 @@ func (c *ShardedMemoryCache) Clear() {
 	wg.Wait()
 }
 
-// 🔥 启动全局清理任务（单例模式）
+// 启动全局清理任务（单例模式）
 func startGlobalCleanupTask() {
 	globalCleanupOnce.Do(func() {
 		globalCleanupTicker = time.NewTicker(5 * time.Minute)
@@ -322,7 +322,7 @@ func startGlobalCleanupTask() {
 	})
 }
 
-// 🔥 注册缓存到全局清理任务
+// 注册缓存到全局清理任务
 func registerForCleanup(cache cleanupTarget) {
 	cacheRegistryMutex.Lock()
 	defer cacheRegistryMutex.Unlock()

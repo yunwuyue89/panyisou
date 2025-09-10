@@ -71,14 +71,7 @@ type GlobalBufferManager struct {
 	buffers          map[string]*GlobalBuffer // 缓冲区映射
 	buffersMutex     sync.RWMutex            // 缓冲区锁
 	
-	// 搜索模式分析
-	patternAnalyzer  *SearchPatternAnalyzer
-	
-	// 数据合并器
-	dataMerger       *AdvancedDataMerger
-	
-	// 状态监控
-	statusMonitor    *BufferStatusMonitor
+	// 已移除：搜索模式分析、数据合并器、状态监控
 	
 	// 统计信息
 	stats            *GlobalBufferStats
@@ -132,10 +125,7 @@ func NewGlobalBufferManager(strategy GlobalBufferStrategy) *GlobalBufferManager 
 		},
 	}
 	
-	// 初始化组件
-	manager.patternAnalyzer = NewSearchPatternAnalyzer()
-	manager.dataMerger = NewAdvancedDataMerger()
-	manager.statusMonitor = NewBufferStatusMonitor()
+	// 初始化组件（移除未使用的监控与合并器）
 	
 	return manager
 }
@@ -150,8 +140,7 @@ func (g *GlobalBufferManager) Initialize() error {
 	g.cleanupTicker = time.NewTicker(5 * time.Minute) // 每5分钟清理一次
 	go g.cleanupRoutine()
 	
-	// 启动状态监控
-	go g.statusMonitor.Start(g)
+	// 移除状态监控启动（监控已删除）
 	
 	// 初始化完成（静默）
 	return nil
@@ -163,13 +152,13 @@ func (g *GlobalBufferManager) AddOperation(op *CacheOperation) (*GlobalBuffer, b
 		return nil, false, err
 	}
 	
-	// 🎯 根据策略确定缓冲区ID
+	// 根据策略确定缓冲区ID
 	bufferID := g.determineBufferID(op)
 	
 	g.buffersMutex.Lock()
 	defer g.buffersMutex.Unlock()
 	
-	// 🔧 获取或创建缓冲区
+	// 获取或创建缓冲区
 	buffer, exists := g.buffers[bufferID]
 	if !exists {
 		buffer = g.createNewBuffer(bufferID, op)
@@ -178,10 +167,10 @@ func (g *GlobalBufferManager) AddOperation(op *CacheOperation) (*GlobalBuffer, b
 		atomic.AddInt64(&g.stats.ActiveBuffers, 1)
 	}
 	
-	// 🚀 添加操作到缓冲区
+	// 添加操作到缓冲区
 	shouldFlush := g.addOperationToBuffer(buffer, op)
 	
-	// 📊 更新统计
+	// 更新统计
 	atomic.AddInt64(&g.stats.TotalOperationsBuffered, 1)
 	
 	return buffer, shouldFlush, nil
@@ -197,8 +186,8 @@ func (g *GlobalBufferManager) determineBufferID(op *CacheOperation) string {
 		return fmt.Sprintf("plugin_%s", op.PluginName)
 		
 	case BufferByPattern:
-		pattern := g.patternAnalyzer.AnalyzePattern(op)
-		return fmt.Sprintf("pattern_%s", pattern.KeywordPattern)
+		// 已移除模式分析器，退化为按关键词分组
+		return fmt.Sprintf("keyword_%s", op.Keyword)
 		
 	case BufferHybrid:
 		// 混合策略优化：插件+时间窗口（去掉关键词避免高并发爆炸）
@@ -236,33 +225,26 @@ func (g *GlobalBufferManager) addOperationToBuffer(buffer *GlobalBuffer, op *Cac
 	buffer.mutex.Lock()
 	defer buffer.mutex.Unlock()
 	
-	// 🔧 数据合并优化
-	merged := g.dataMerger.TryMergeOperation(buffer, op)
-	if merged {
-		atomic.AddInt64(&g.stats.TotalOperationsMerged, 1)
-		atomic.AddInt64(&g.stats.TotalDataMerged, int64(op.DataSize))
-	} else {
-		// 添加新操作
-		buffer.Operations = append(buffer.Operations, op)
-		buffer.TotalOperations++
-		buffer.TotalDataSize += int64(op.DataSize)
-		
-		// 按关键词分组
-		if buffer.KeywordGroups[op.Keyword] == nil {
-			buffer.KeywordGroups[op.Keyword] = make([]*CacheOperation, 0)
-		}
-		buffer.KeywordGroups[op.Keyword] = append(buffer.KeywordGroups[op.Keyword], op)
-		
-		// 按插件分组
-		if buffer.PluginGroups[op.PluginName] == nil {
-			buffer.PluginGroups[op.PluginName] = make([]*CacheOperation, 0)
-		}
-		buffer.PluginGroups[op.PluginName] = append(buffer.PluginGroups[op.PluginName], op)
+	// 直接追加（已移除数据合并器）
+	buffer.Operations = append(buffer.Operations, op)
+	buffer.TotalOperations++
+	buffer.TotalDataSize += int64(op.DataSize)
+	
+	// 按关键词分组
+	if buffer.KeywordGroups[op.Keyword] == nil {
+		buffer.KeywordGroups[op.Keyword] = make([]*CacheOperation, 0)
 	}
+	buffer.KeywordGroups[op.Keyword] = append(buffer.KeywordGroups[op.Keyword], op)
+	
+	// 按插件分组
+	if buffer.PluginGroups[op.PluginName] == nil {
+		buffer.PluginGroups[op.PluginName] = make([]*CacheOperation, 0)
+	}
+	buffer.PluginGroups[op.PluginName] = append(buffer.PluginGroups[op.PluginName], op)
 	
 	buffer.LastUpdatedAt = time.Now()
 	
-	// 🎯 检查是否应该刷新
+	// 检查是否应该刷新
 	return g.shouldFlushBuffer(buffer)
 }
 
@@ -503,10 +485,10 @@ func (g *GlobalBufferManager) GetExpiredBuffersForFlush() []string {
 	defer g.buffersMutex.RUnlock()
 	
 	now := time.Now()
-	expiredBuffers := make([]string, 0, 10) // 🚀 预分配容量，减少内存重分配
+	expiredBuffers := make([]string, 0, 10) // 预分配容量，减少内存重分配
 	
 	for id, buffer := range g.buffers {
-		// 🎯 快速预检查：先检查时间，减少锁竞争
+		// 快速预检查：先检查时间，减少锁竞争
 		if now.Sub(buffer.LastUpdatedAt) <= 4*time.Minute {
 			continue // 跳过未过期的缓冲区
 		}

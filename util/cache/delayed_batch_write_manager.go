@@ -41,25 +41,25 @@ type CacheOperation struct {
 
 // CacheWriteConfig 缓存写入配置
 type CacheWriteConfig struct {
-	// 🎯 核心策略
+	// 核心策略
 	Strategy                CacheWriteStrategy `env:"CACHE_WRITE_STRATEGY" default:"hybrid"`
 	
-	// ⏱️ 批量写入参数（自动计算，但可手动覆盖）
+	// 批量写入参数（自动计算，但可手动覆盖）
 	MaxBatchInterval        time.Duration      `env:"BATCH_MAX_INTERVAL"`        // 0表示自动计算
 	MaxBatchSize            int                `env:"BATCH_MAX_SIZE"`            // 0表示自动计算
 	MaxBatchDataSize        int                `env:"BATCH_MAX_DATA_SIZE"`       // 0表示自动计算
 	
-	// 🎛️ 行为参数
+	// 行为参数
 	HighPriorityRatio       float64            `env:"HIGH_PRIORITY_RATIO" default:"0.3"`
 	EnableCompression       bool               // 默认启用操作合并
 	
-	// 📊 内部计算参数（运行时动态调整）
+	// 内部计算参数（运行时动态调整）
 	idleThresholdCPU        float64            // CPU空闲阈值
 	idleThresholdDisk       float64            // 磁盘空闲阈值
 	forceFlushInterval      time.Duration      // 强制刷新间隔
 	autoTuneInterval        time.Duration      // 调优检查间隔
 	
-	// 🔧 约束边界（硬编码）
+	// 约束边界（硬编码）
 	minBatchInterval        time.Duration      // 最小30秒
 	maxBatchInterval        time.Duration      // 最大10分钟
 	minBatchSize            int                // 最小10个
@@ -68,16 +68,16 @@ type CacheWriteConfig struct {
 
 // Initialize 初始化配置
 func (c *CacheWriteConfig) Initialize() error {
-	// 🔧 设置硬编码约束边界
+	// 设置硬编码约束边界
 	c.minBatchInterval = 30 * time.Second
 	c.maxBatchInterval = 600 * time.Second  // 10分钟
 	c.minBatchSize = 10
 	c.maxBatchSize = 1000
 	
-	// 🎯 加载环境变量
+	// 加载环境变量
 	c.loadFromEnvironment()
 	
-	// 🤖 自动计算最优参数（除非手动设置）
+	// 自动计算最优参数（除非手动设置）
 	if c.MaxBatchInterval == 0 {
 		c.MaxBatchInterval = c.calculateOptimalBatchInterval()
 	}
@@ -88,13 +88,13 @@ func (c *CacheWriteConfig) Initialize() error {
 		c.MaxBatchDataSize = c.calculateOptimalDataSize()
 	}
 	
-	// 🔧 内部参数自动设置
+	// 内部参数自动设置
 	c.forceFlushInterval = c.MaxBatchInterval * 5  // 5倍批量间隔
 	c.autoTuneInterval = 300 * time.Second         // 5分钟调优间隔
 	c.idleThresholdCPU = 0.3                      // CPU空闲阈值
 	c.idleThresholdDisk = 0.5                     // 磁盘空闲阈值
 	
-	// ✅ 参数验证和约束
+	// 参数验证和约束
 	return c.validateAndConstraint()
 }
 
@@ -134,7 +134,7 @@ func (c *CacheWriteConfig) loadFromEnvironment() {
 
 // calculateOptimalBatchInterval 计算最优批量间隔
 func (c *CacheWriteConfig) calculateOptimalBatchInterval() time.Duration {
-	// 🎯 基于系统性能动态计算
+	// 基于系统性能动态计算
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	
@@ -164,7 +164,7 @@ func (c *CacheWriteConfig) calculateOptimalBatchInterval() time.Duration {
 
 // calculateOptimalBatchSize 计算最优批量大小
 func (c *CacheWriteConfig) calculateOptimalBatchSize() int {
-	// 🎯 基于CPU核心数和内存动态计算
+	// 基于CPU核心数和内存动态计算
 	numCPU := runtime.NumCPU()
 	
 	var memStats runtime.MemStats
@@ -194,7 +194,7 @@ func (c *CacheWriteConfig) calculateOptimalBatchSize() int {
 
 // calculateOptimalDataSize 计算最优数据大小
 func (c *CacheWriteConfig) calculateOptimalDataSize() int {
-	// 🎯 基于可用内存计算
+	// 基于可用内存计算
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	availableMemoryGB := float64(memStats.Sys) / 1024 / 1024 / 1024
@@ -214,7 +214,7 @@ func (c *CacheWriteConfig) calculateOptimalDataSize() int {
 
 // validateAndConstraint 验证和约束配置
 func (c *CacheWriteConfig) validateAndConstraint() error {
-	// 🔧 验证配置合理性
+	// 验证配置合理性
 	if c.MaxBatchInterval < c.minBatchInterval {
 		return fmt.Errorf("批量间隔配置错误: MaxBatchInterval(%v) < MinBatchInterval(%v)", 
 			c.MaxBatchInterval, c.minBatchInterval)
@@ -230,7 +230,7 @@ func (c *CacheWriteConfig) validateAndConstraint() error {
 			c.HighPriorityRatio)
 	}
 	
-	// 🎯 应用最终约束
+	// 应用最终约束
 	if c.MaxBatchInterval > c.maxBatchInterval {
 		c.MaxBatchInterval = c.maxBatchInterval
 	}
@@ -256,7 +256,7 @@ type DelayedBatchWriteManager struct {
 	queueBuffer       []*CacheOperation
 	queueMutex        sync.Mutex
 	
-	// 🚀 全局缓冲区管理器
+	// 全局缓冲区管理器
 	globalBufferManager *GlobalBufferManager
 	
 	// 统计信息
@@ -320,7 +320,7 @@ func NewDelayedBatchWriteManager() (*DelayedBatchWriteManager, error) {
 		return nil, fmt.Errorf("配置初始化失败: %v", err)
 	}
 	
-	// 🚀 创建全局缓冲区管理器
+	// 创建全局缓冲区管理器
 	globalBufferManager := NewGlobalBufferManager(BufferHybrid)
 	
 	manager := &DelayedBatchWriteManager{
@@ -349,7 +349,7 @@ func (m *DelayedBatchWriteManager) Initialize() error {
 	m.initMutex.Lock()
 	defer m.initMutex.Unlock()
 	
-	// 🚀 初始化全局缓冲区管理器
+	// 初始化全局缓冲区管理器
 	if err := m.globalBufferManager.Initialize(); err != nil {
 		return fmt.Errorf("全局缓冲区管理器初始化失败: %v", err)
 	}
@@ -364,7 +364,7 @@ func (m *DelayedBatchWriteManager) Initialize() error {
 	// 启动自动调优goroutine
 	go m.autoTuningProcessor()
 	
-	// 🔍 启动全局缓冲区监控
+	// 启动全局缓冲区监控
 	go m.globalBufferMonitor()
 	
 	fmt.Printf("缓存写入策略: %s\n", m.strategy)
@@ -383,7 +383,7 @@ func (m *DelayedBatchWriteManager) HandleCacheOperation(op *CacheOperation) erro
 		return err
 	}
 	
-	// 🔥 关键：无论什么策略，都立即更新内存缓存
+	// 关键：无论什么策略，都立即更新内存缓存
 	if err := m.updateMemoryCache(op); err != nil {
 		return fmt.Errorf("内存缓存更新失败: %v", err)
 	}
@@ -393,20 +393,20 @@ func (m *DelayedBatchWriteManager) HandleCacheOperation(op *CacheOperation) erro
 		return m.immediateWriteToDisk(op)
 	}
 	
-	// 🚀 使用全局缓冲区管理器进行智能缓冲
+	// 使用全局缓冲区管理器进行智能缓冲
 	return m.handleWithGlobalBuffer(op)
 }
 
 // handleWithGlobalBuffer 使用全局缓冲区处理操作
 func (m *DelayedBatchWriteManager) handleWithGlobalBuffer(op *CacheOperation) error {
-	// 🎯 尝试添加到全局缓冲区
+	// 尝试添加到全局缓冲区
 	buffer, shouldFlush, err := m.globalBufferManager.AddOperation(op)
 	if err != nil {
 		// 全局缓冲区失败，降级到本地队列
 		return m.enqueueForBatchWrite(op)
 	}
 	
-	// 🚀 如果需要刷新缓冲区
+	// 如果需要刷新缓冲区
 	if shouldFlush {
 		return m.flushGlobalBuffer(buffer.ID)
 	}
@@ -425,7 +425,7 @@ func (m *DelayedBatchWriteManager) flushGlobalBuffer(bufferID string) error {
 		return nil
 	}
 	
-	// 🎯 按优先级排序操作
+	// 按优先级排序操作
 	sort.Slice(operations, func(i, j int) bool {
 		if operations[i].Priority != operations[j].Priority {
 			return operations[i].Priority < operations[j].Priority
@@ -433,14 +433,14 @@ func (m *DelayedBatchWriteManager) flushGlobalBuffer(bufferID string) error {
 		return operations[i].Timestamp.Before(operations[j].Timestamp)
 	})
 	
-	// 📊 统计信息更新
+	// 统计信息更新
 	atomic.AddInt64(&m.stats.BatchWrites, 1)
 	atomic.AddInt64(&m.stats.TotalWrites, 1)
 	m.stats.LastFlushTime = time.Now()
 	m.stats.LastFlushTrigger = "全局缓冲区触发"
 	m.stats.LastBatchSize = len(operations)
 	
-	// 🚀 批量写入磁盘
+	// 批量写入磁盘
 	err = m.batchWriteToDisk(operations)
 	if err != nil {
 		atomic.AddInt64(&m.stats.FailedWrites, 1)
@@ -462,7 +462,7 @@ func (m *DelayedBatchWriteManager) globalBufferMonitor() {
 	for {
 		select {
 		case <-ticker.C:
-			// 🔍 检查是否有过期的缓冲区需要刷新
+			// 检查是否有过期的缓冲区需要刷新
 			m.checkAndFlushExpiredBuffers()
 			
 		case <-m.shutdownChan:
@@ -473,26 +473,26 @@ func (m *DelayedBatchWriteManager) globalBufferMonitor() {
 
 // checkAndFlushExpiredBuffers 检查并刷新过期缓冲区
 func (m *DelayedBatchWriteManager) checkAndFlushExpiredBuffers() {
-	// 🔧 修复：使用原子操作获取需要刷新的缓冲区列表
+	// 使用原子操作获取需要刷新的缓冲区列表
 	expiredBuffers := m.globalBufferManager.GetExpiredBuffersForFlush()
 	
 	flushedCount := 0
 	for _, bufferID := range expiredBuffers {
 		if err := m.flushGlobalBuffer(bufferID); err != nil {
-			// 🎯 改进：区分错误类型，缓冲区不存在是正常情况
+			// 区分错误类型，缓冲区不存在是正常情况
 			if isBufferNotExistError(err) {
 				// 静默处理：缓冲区已被其他线程清理，这是正常的
 				continue
 			}
 			// 只有真正的错误才打印警告
-			fmt.Printf("⚠️ [全局缓冲区] 刷新缓冲区失败 %s: %v\n", bufferID, err)
+			fmt.Printf("[全局缓冲区] 刷新缓冲区失败 %s: %v\n", bufferID, err)
 		} else {
 			flushedCount++
 		}
 	}
 	
 	if flushedCount > 0 {
-		fmt.Printf("🔄 [全局缓冲区] 刷新完成，处理 %d 个过期缓冲区\n", flushedCount)
+		fmt.Printf("[全局缓冲区] 刷新完成，处理 %d 个过期缓冲区\n", flushedCount)
 	}
 }
 
@@ -505,18 +505,16 @@ func isBufferNotExistError(err error) bool {
 
 // updateMemoryCache 更新内存缓存（立即执行）
 func (m *DelayedBatchWriteManager) updateMemoryCache(op *CacheOperation) error {
-	// 🔥 关键修复：如果有主缓存更新函数，立即更新内存层
+	// 如果有主缓存更新函数，立即更新内存层
 	if m.mainCacheUpdater != nil {
 		// 序列化数据
-		data, err := m.serializer.Serialize(op.Data)
+		_, err := m.serializer.Serialize(op.Data)
 		if err != nil {
 			return fmt.Errorf("内存缓存数据序列化失败: %v", err)
 		}
 		
 		// 这里只更新内存，不写磁盘（磁盘由批量写入处理）
 		// 注意：mainCacheUpdater实际上是SetBothLevels，会同时更新内存和磁盘
-		// 为了避免重复写磁盘，我们暂时保持原逻辑
-		_ = data // 暂不使用，避免编译警告
 	}
 	return nil
 }
@@ -644,21 +642,21 @@ func (m *DelayedBatchWriteManager) Shutdown(timeout time.Duration) error {
 	go func() {
 		var lastErr error
 		
-		// 🚀 第一步：强制刷新全局缓冲区（优先级最高）
+		// 第一步：强制刷新全局缓冲区（优先级最高）
 		if err := m.flushAllGlobalBuffers(); err != nil {
-			fmt.Printf("❌ [数据保护] 全局缓冲区刷新失败: %v\n", err)
+			fmt.Printf("[数据保护] 全局缓冲区刷新失败: %v\n", err)
 			lastErr = err
 		} 
 		
-		// 🔧 第二步：刷新本地队列
+		// 第二步：刷新本地队列
 		if err := m.flushAllPendingData(); err != nil {
-			fmt.Printf("❌ [数据保护] 本地队列刷新失败: %v\n", err)
+			fmt.Printf("[数据保护] 本地队列刷新失败: %v\n", err)
 			lastErr = err
 		} 
 		
-		// 🔄 第三步：关闭全局缓冲区管理器
+		// 第三步：关闭全局缓冲区管理器
 		if err := m.globalBufferManager.Shutdown(); err != nil {
-			fmt.Printf("❌ [数据保护] 全局缓冲区管理器关闭失败: %v\n", err)
+			fmt.Printf("[数据保护] 全局缓冲区管理器关闭失败: %v\n", err)
 			lastErr = err
 		} 
 		
@@ -686,7 +684,7 @@ func (m *DelayedBatchWriteManager) flushAllGlobalBuffers() error {
 	for bufferID, operations := range allBuffers {
 		if len(operations) > 0 {
 			if err := m.batchWriteToDisk(operations); err != nil {
-				fmt.Printf("❌ [全局缓冲区] 缓冲区 %s 刷新失败: %v\n", bufferID, err)
+				fmt.Printf("[全局缓冲区] 缓冲区 %s 刷新失败: %v\n", bufferID, err)
 				lastErr = fmt.Errorf("刷新全局缓冲区 %s 失败: %v", bufferID, err)
 				continue
 			}
@@ -799,7 +797,7 @@ func (m *DelayedBatchWriteManager) executeBatchWrite(trigger string) error {
 		return nil
 	}
 	
-	// 🔧 操作合并：如果启用压缩，使用合并后的操作
+	// 操作合并：如果启用压缩，使用合并后的操作
 	var operations []*CacheOperation
 	if m.config.EnableCompression {
 		operations = m.getCompressedOperations()
@@ -812,7 +810,7 @@ func (m *DelayedBatchWriteManager) executeBatchWrite(trigger string) error {
 		return nil
 	}
 	
-	// 🎯 按优先级排序：确保重要数据优先写入
+	// 按优先级排序：确保重要数据优先写入
 	sort.Slice(operations, func(i, j int) bool {
 		if operations[i].Priority != operations[j].Priority {
 			return operations[i].Priority < operations[j].Priority // 数字越小优先级越高
@@ -820,13 +818,13 @@ func (m *DelayedBatchWriteManager) executeBatchWrite(trigger string) error {
 		return operations[i].Timestamp.Before(operations[j].Timestamp)
 	})
 	
-	// 📊 统计信息更新
+	// 统计信息更新
 	atomic.AddInt64(&m.stats.BatchWrites, 1)
 	m.stats.LastFlushTime = time.Now()
 	m.stats.LastFlushTrigger = trigger
 	m.stats.LastBatchSize = len(operations)
 	
-	// 🚀 批量写入磁盘
+	// 批量写入磁盘
 	err := m.batchWriteToDisk(operations)
 	if err != nil {
 		atomic.AddInt64(&m.stats.FailedWrites, 1)
@@ -841,7 +839,7 @@ func (m *DelayedBatchWriteManager) executeBatchWrite(trigger string) error {
 		m.mapMutex.Unlock()
 	}
 	
-	// 📈 成功统计
+	// 成功统计
 	atomic.AddInt64(&m.stats.SuccessfulWrites, 1)
 	atomic.AddInt64(&m.stats.TotalWrites, 1)
 	m.stats.TotalOperationsWritten += len(operations)
@@ -895,10 +893,10 @@ func (m *DelayedBatchWriteManager) emergencyFlush() error {
 
 // autoTuneParameters 自适应参数调优
 func (m *DelayedBatchWriteManager) autoTuneParameters() {
-	// 🤖 完全自动调优，无需配置开关
+	// 完全自动调优，无需配置开关
 	stats := m.collectRecentStats()
 	
-	// 🎯 调优批量间隔：基于系统负载动态调整
+	// 调优批量间隔：基于系统负载动态调整
 	avgSystemLoad := stats.SystemLoadAverage
 	switch {
 	case avgSystemLoad > 0.8: // 高负载：延长间隔，减少干扰
@@ -907,7 +905,7 @@ func (m *DelayedBatchWriteManager) autoTuneParameters() {
 		m.config.MaxBatchInterval = m.maxDuration(m.config.MaxBatchInterval*8/10, m.config.minBatchInterval)
 	}
 	
-	// 🎯 调优批量大小：基于写入频率动态调整
+	// 调优批量大小：基于写入频率动态调整
 	queueSize := int(atomic.LoadInt32(&m.stats.CurrentQueueSize))
 	switch {
 	case queueSize > 200: // 高频：增大批量，提高效率
@@ -954,20 +952,13 @@ func (m *DelayedBatchWriteManager) GetStats() map[string]interface{} {
 		stats.SystemLoadAverage = float64(stats.TotalWrites) / float64(stats.TotalOperations)
 	}
 	
-	// 🚀 获取全局缓冲区统计
+	// 获取全局缓冲区统计
 	globalBufferStats := m.globalBufferManager.GetStats()
 	
-	// 🔍 获取监控数据（如果监控器存在）
-	var monitoringData *MonitoringData
-	if m.globalBufferManager.statusMonitor != nil {
-		monitoringData = m.globalBufferManager.statusMonitor.GetMonitoringData()
-	}
-	
-	// 🎯 合并所有统计信息
+	// 合并所有统计信息
 	combinedStats := map[string]interface{}{
 		"write_manager": &stats,
 		"global_buffer": globalBufferStats,
-		"monitoring":    monitoringData,
 		"buffer_info":   m.globalBufferManager.GetBufferInfo(),
 	}
 	

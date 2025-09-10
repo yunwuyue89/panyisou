@@ -260,11 +260,11 @@ func getMinSizeToCompress() int {
 func getGCPercent() int {
 	percentEnv := os.Getenv("GC_PERCENT")
 	if percentEnv == "" {
-		return 100 // 默认100%
+		return 50 // 默认50% - 优化内存管理，更频繁的GC避免内存暴涨
 	}
 	percent, err := strconv.Atoi(percentEnv)
 	if err != nil || percent <= 0 {
-		return 100
+		return 50 // 错误时也使用优化后的默认值
 	}
 	return percent
 }

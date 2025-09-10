@@ -90,7 +90,7 @@ func initApp() {
 	// 初始化HTTP客户端
 	util.InitHTTPClient()
 
-	// 🔥 初始化缓存写入管理器
+	// 初始化缓存写入管理器
 	var err error
 	globalCacheWriteManager, err = cache.NewDelayedBatchWriteManager()
 	if err != nil {
@@ -188,20 +188,20 @@ func startServer() {
 	<-quit
 	fmt.Println("正在关闭服务器...")
 
-	// 🔥 优先保存缓存数据到磁盘（数据安全第一）
+	// 优先保存缓存数据到磁盘（数据安全第一）
 	// 增加关闭超时时间，确保数据有足够时间保存
 	shutdownTimeout := 10 * time.Second
 	
 	if globalCacheWriteManager != nil {
 		if err := globalCacheWriteManager.Shutdown(shutdownTimeout); err != nil {
-			log.Printf("❌ 缓存数据保存失败: %v", err)
+			log.Printf("缓存数据保存失败: %v", err)
 		}
 	}
 	
 	// 额外确保内存缓存也被保存（双重保障）
 	if mainCache := service.GetEnhancedTwoLevelCache(); mainCache != nil {
 		if err := mainCache.FlushMemoryToDisk(); err != nil {
-			log.Printf("❌ 内存缓存同步失败: %v", err)
+			log.Printf("内存缓存同步失败: %v", err)
 		} 
 	}
 

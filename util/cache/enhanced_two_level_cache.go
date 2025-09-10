@@ -34,7 +34,7 @@ func NewEnhancedTwoLevelCache() (*EnhancedTwoLevelCache, error) {
 	// 创建序列化器
 	serializer := NewGobSerializer()
 
-	// 🔥 设置内存缓存的磁盘缓存引用，用于LRU淘汰时的备份
+	// 设置内存缓存的磁盘缓存引用，用于LRU淘汰时的备份
 	memCache.SetDiskCacheReference(diskCache)
 
 	return &EnhancedTwoLevelCache{
@@ -65,7 +65,7 @@ func (c *EnhancedTwoLevelCache) Set(key string, data []byte, ttl time.Duration) 
 func (c *EnhancedTwoLevelCache) SetMemoryOnly(key string, data []byte, ttl time.Duration) error {
 	now := time.Now()
 	
-	// 🔥 只更新内存缓存，不触发磁盘写入
+	// 只更新内存缓存，不触发磁盘写入
 	c.memory.SetWithTimestamp(key, data, ttl, now)
 	
 	return nil
@@ -78,7 +78,7 @@ func (c *EnhancedTwoLevelCache) SetBothLevels(key string, data []byte, ttl time.
 	// 同步更新内存缓存
 	c.memory.SetWithTimestamp(key, data, ttl, now)
 	
-	// 🔥 修复：同步更新磁盘缓存，确保数据立即写入
+	// 同步更新磁盘缓存，确保数据立即写入
 	return c.disk.Set(key, data, ttl)
 }
 
@@ -155,7 +155,7 @@ func (c *EnhancedTwoLevelCache) FlushMemoryToDisk() error {
 	for key, item := range allItems {
 		// 同步写入到磁盘缓存
 		if err := c.disk.Set(key, item.Data, item.TTL); err != nil {
-			fmt.Printf("❌ [内存同步] 同步失败: %s -> %v\n", key, err)
+			fmt.Printf("[内存同步] 同步失败: %s -> %v\n", key, err)
 			lastErr = err
 			continue
 		}
