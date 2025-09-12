@@ -69,6 +69,7 @@ import (
 	_ "pansou/plugin/xiaoji"
 	_ "pansou/plugin/xdyh"
 	_ "pansou/plugin/haisou"
+	_ "pansou/plugin/bixin"
 )
 
 // 全局缓存写入管理器
