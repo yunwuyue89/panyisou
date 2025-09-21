@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// 通用网盘链接匹配正则表达式 - 修改为更精确的匹配模式
-var AllPanLinksPattern = regexp.MustCompile(`(?i)(?:(?:magnet:\?xt=urn:btih:[a-zA-Z0-9]+)|(?:ed2k://\|file\|[^|]+\|\d+\|[A-Fa-f0-9]+\|/?)|(?:https?://(?:(?:[\w.-]+\.)?(?:pan\.(?:baidu|quark)\.cn|(?:www\.)?(?:alipan|aliyundrive)\.com|drive\.uc\.cn|cloud\.189\.cn|caiyun\.139\.com|(?:www\.)?123(?:684|685|912|pan|592)\.(?:com|cn)|115\.com|115cdn\.com|anxia\.com|pan\.xunlei\.com|mypikpak\.com))(?:/[^\s'"<>()]*)?))`)
+// 通用网盘链接匹配正则表达式 - 修改为更精确的匹配模式（已移除magnet和ed2k支持）
+var AllPanLinksPattern = regexp.MustCompile(`(?i)(?:https?://(?:(?:[\w.-]+\.)?(?:pan\.(?:baidu|quark)\.cn|(?:www\.)?(?:alipan|aliyundrive)\.com|drive\.uc\.cn|cloud\.189\.cn|caiyun\.139\.com|(?:www\.)?123(?:684|685|912|pan|592)\.(?:com|cn)|115\.com|115cdn\.com|anxia\.com|pan\.xunlei\.com|mypikpak\.com))(?:/[^\s'"<>()]*)?)`)
 
 // 单独定义各种网盘的链接匹配模式，以便更精确地提取
 // 修改百度网盘链接正则表达式，确保只匹配到链接本身，不包含后面的文本
@@ -45,14 +45,7 @@ func GetLinkType(url string) string {
 		url = strings.TrimSpace(url)
 	}
 	
-	// 根据关键词判断ed2k链接
-	if strings.Contains(url, "ed2k:") {
-		return "ed2k"
-	}
-	
-	if strings.HasPrefix(url, "magnet:") {
-		return "magnet"
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	if strings.Contains(url, "pan.baidu.com") {
 		return "baidu"

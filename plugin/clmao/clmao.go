@@ -35,8 +35,7 @@ const (
 
 // 预编译的正则表达式
 var (
-	// 磁力链接正则
-	magnetLinkRegex = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}[^"'\s]*`)
+	// 已移除magnet链接支持
 	
 	// 文件大小正则
 	fileSizeRegex = regexp.MustCompile(`(\d+\.?\d*)\s*(B|KB|MB|GB|TB)`)

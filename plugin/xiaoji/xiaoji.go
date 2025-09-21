@@ -471,10 +471,7 @@ func (p *XiaojiAsyncPlugin) determineCloudType(url string) string {
 		return "mobile"
 	case strings.Contains(url, "mypikpak.com"):
 		return "pikpak"
-	case strings.Contains(url, "magnet:"):
-		return "magnet"
-	case strings.Contains(url, "ed2k://"):
-		return "ed2k"
+	// 已移除magnet和ed2k链接支持
 	default:
 		// ctfile.com 和其他未知网盘都归类到 others
 		return "others"

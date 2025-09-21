@@ -388,10 +388,8 @@ func (p *ThePirateBayPlugin) parseSearchResultItem(s *goquery.Selection) *model.
 		return nil // ThePirateBay只提供磁力链接，没有磁力链接就跳过
 	}
 	
-	// 验证磁力链接格式
-	if !magnetLinkRegex.MatchString(magnetURL) {
-		return nil
-	}
+	// 已移除magnet链接支持，不再处理磁力链接
+	return nil
 	
 	// 获取分类信息
 	var tags []string

@@ -35,11 +35,7 @@ const (
 
 // 预编译的正则表达式
 var (
-	// 磁力链接正则
-	magnetLinkRegex = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-fA-F]{40}[^"'\s]*`)
-	
-	// 磁力链接缓存，键为详情页URL，值为磁力链接
-	magnetCache = sync.Map{}
+	// 已移除magnet链接支持
 	cacheTTL    = 1 * time.Hour // 缓存1小时
 )
 

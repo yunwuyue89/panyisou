@@ -186,6 +186,41 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 	
+	// 检查用户权限和限制
+	user := GetCurrentUser(c)
+	if user != nil {
+		// 检查用户搜索权限
+		if !user.CanSearch() {
+			c.JSON(http.StatusForbidden, model.NewErrorResponse(403, "账户已被禁用"))
+			return
+		}
+		
+		// 根据用户类型调整并发数
+		maxConcurrency := user.GetMaxConcurrency()
+		if req.Concurrency <= 0 || req.Concurrency > maxConcurrency {
+			req.Concurrency = maxConcurrency
+		}
+		
+		// 根据用户偏好设置默认值
+		if len(req.Channels) == 0 && len(user.Profile.Preferences.DefaultChannels) > 0 {
+			req.Channels = user.Profile.Preferences.DefaultChannels
+		}
+		if len(req.Plugins) == 0 && len(user.Profile.Preferences.DefaultPlugins) > 0 {
+			req.Plugins = user.Profile.Preferences.DefaultPlugins
+		}
+		if len(req.CloudTypes) == 0 && len(user.Profile.Preferences.DefaultCloudTypes) > 0 {
+			req.CloudTypes = user.Profile.Preferences.DefaultCloudTypes
+		}
+	} else {
+		// 未认证用户使用默认限制
+		if req.Concurrency <= 0 {
+			req.Concurrency = 3 // 未认证用户最大3个并发
+		}
+		if req.Concurrency > 3 {
+			req.Concurrency = 3
+		}
+	}
+	
 	// 可选：启用调试输出（生产环境建议注释掉）
 	// fmt.Printf("🔧 [调试] 搜索参数: keyword=%s, channels=%v, concurrency=%d, refresh=%v, resultType=%s, sourceType=%s, plugins=%v, cloudTypes=%v, ext=%v\n", 
 	//	req.Keyword, req.Channels, req.Concurrency, req.ForceRefresh, req.ResultType, req.SourceType, req.Plugins, req.CloudTypes, req.Ext)

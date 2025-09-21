@@ -803,17 +803,7 @@ func (p *Fox4kPlugin) extractDownloadLinks(doc *goquery.Document, detail *detail
 	// 提取页面中所有文本内容，寻找链接
 	pageText := doc.Text()
 	
-	// 1. 提取磁力链接
-	magnetMatches := magnetLinkRegex.FindAllString(pageText, -1)
-	for _, magnetLink := range magnetMatches {
-		p.addDownloadLink(detail, "magnet", magnetLink, "")
-	}
-	
-	// 2. 提取电驴链接
-	ed2kMatches := ed2kLinkRegex.FindAllString(pageText, -1)
-	for _, ed2kLink := range ed2kMatches {
-		p.addDownloadLink(detail, "ed2k", ed2kLink, "")
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	// 3. 提取网盘链接（排除夸克）
 	for panType, regex := range panLinkRegexes {
@@ -878,17 +868,7 @@ func (p *Fox4kPlugin) processFoundLink(detail *detailPageResponse, link, quality
 		return
 	}
 	
-	// 检查磁力链接
-	if magnetLinkRegex.MatchString(link) {
-		p.addDownloadLink(detail, "magnet", link, "")
-		return
-	}
-	
-	// 检查电驴链接
-	if ed2kLinkRegex.MatchString(link) {
-		p.addDownloadLink(detail, "ed2k", link, "")
-		return
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	// 检查网盘链接
 	for panType, regex := range panLinkRegexes {
@@ -909,17 +889,7 @@ func (p *Fox4kPlugin) extractLinksFromText(detail *detailPageResponse, text, qua
 		return
 	}
 	
-	// 磁力链接
-	magnetMatches := magnetLinkRegex.FindAllString(text, -1)
-	for _, magnetLink := range magnetMatches {
-		p.addDownloadLink(detail, "magnet", magnetLink, "")
-	}
-	
-	// 电驴链接
-	ed2kMatches := ed2kLinkRegex.FindAllString(text, -1)
-	for _, ed2kLink := range ed2kMatches {
-		p.addDownloadLink(detail, "ed2k", ed2kLink, "")
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	// 网盘链接
 	for panType, regex := range panLinkRegexes {

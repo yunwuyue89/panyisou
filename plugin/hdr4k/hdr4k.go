@@ -529,10 +529,7 @@ func (p *Hdr4kAsyncPlugin) determineLinkType(url, name string) string {
 		linkType = "123"
 	case strings.Contains(lowerURL, "mypikpak.com"):
 		linkType = "pikpak"
-	case strings.HasPrefix(lowerURL, "magnet:"):
-		linkType = "magnet"
-	case strings.HasPrefix(lowerURL, "ed2k:"):
-		linkType = "ed2k"
+	// 已移除magnet和ed2k链接支持
 	default:
 		// 根据名称判断
 		switch {

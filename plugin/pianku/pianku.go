@@ -459,15 +459,7 @@ func (p *PiankuPlugin) extractDownloadLinks(doc *goquery.Document) []model.Link 
 
 // isValidLink 验证链接是否有效
 func (p *PiankuPlugin) isValidLink(url string) bool {
-	// 检查是否为磁力链接
-	if magnetLinkRegex.MatchString(url) {
-		return true
-	}
-	
-	// 检查是否为ED2K链接
-	if ed2kLinkRegex.MatchString(url) {
-		return true
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	// 检查是否为有效的网盘链接
 	for _, regex := range panLinkRegexes {
@@ -482,15 +474,7 @@ func (p *PiankuPlugin) isValidLink(url string) bool {
 
 // determineLinkType 判断链接类型
 func (p *PiankuPlugin) determineLinkType(url string) string {
-	// 检查磁力链接
-	if magnetLinkRegex.MatchString(url) {
-		return "magnet"
-	}
-	
-	// 检查ED2K链接
-	if ed2kLinkRegex.MatchString(url) {
-		return "ed2k"
-	}
+	// 已移除magnet和ed2k链接支持
 	
 	// 检查网盘链接
 	for panType, regex := range panLinkRegexes {

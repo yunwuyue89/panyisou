@@ -369,10 +369,7 @@ func (p *ErxiaoAsyncPlugin) determineLinkTypeOptimized(apiType, url string) stri
 		return "123"
 	case pikpakLinkRegex.MatchString(url):
 		return "pikpak"
-	case magnetLinkRegex.MatchString(url):
-		return "magnet"
-	case ed2kLinkRegex.MatchString(url):
-		return "ed2k"
+	// 已移除magnet和ed2k链接支持
 	case quarkLinkRegex.MatchString(url):
 		return "quark" 
 	default:
@@ -403,10 +400,7 @@ func (p *ErxiaoAsyncPlugin) determineLinkType(url string) string {
 		return "123"
 	case pikpakLinkRegex.MatchString(url):
 		return "pikpak"
-	case magnetLinkRegex.MatchString(url):
-		return "magnet"
-	case ed2kLinkRegex.MatchString(url):
-		return "ed2k"
+	// 已移除magnet和ed2k链接支持
 	default:
 		return "" // 不支持的类型返回空字符串
 	}

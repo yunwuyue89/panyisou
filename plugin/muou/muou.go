@@ -490,8 +490,7 @@ func (p *MuouAsyncPlugin) isValidNetworkDriveURL(url string) bool {
 		   jianguoyunLinkRegex.MatchString(url) ||
 		   link123Regex.MatchString(url) ||
 		   pikpakLinkRegex.MatchString(url) ||
-		   magnetLinkRegex.MatchString(url) ||
-		   ed2kLinkRegex.MatchString(url)
+			   // 已移除magnet和ed2k链接支持
 }
 
 // determineLinkType 根据URL确定链接类型（支持16种类型）
@@ -523,10 +522,7 @@ func (p *MuouAsyncPlugin) determineLinkType(url string) string {
 		return "123"
 	case pikpakLinkRegex.MatchString(url):
 		return "pikpak"
-	case magnetLinkRegex.MatchString(url):
-		return "magnet"
-	case ed2kLinkRegex.MatchString(url):
-		return "ed2k"
+	// 已移除magnet和ed2k链接支持
 	default:
 		return "" // 不支持的类型返回空字符串
 	}

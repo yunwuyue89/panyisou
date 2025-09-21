@@ -33,7 +33,7 @@ const (
 // 预编译正则表达式
 var (
 	detailURLRegex  = regexp.MustCompile(DetailURLPattern)
-	magnetLinkRegex = regexp.MustCompile(`magnet:\?xt=urn:btih:[0-9a-zA-Z]+`)
+	// 已移除magnet链接支持
 	dateRegex       = regexp.MustCompile(`上映日期: (\d{4}-\d{2}-\d{2})`)
 )
 
@@ -335,13 +335,7 @@ func (p *XuexizhinanPlugin) processDetailPage(client *http.Client, detailURL str
 		if s.Is("li") {
 			// 提取磁力链接
 			text := s.Text()
-			if strings.Contains(text, "magnet:?xt=urn:btih:") {
-				// 使用预编译的正则表达式
-				magnetMatch := magnetLinkRegex.FindString(text)
-				if magnetMatch != "" {
-					response.MagnetLinks = append(response.MagnetLinks, magnetMatch)
-				}
-			}
+			// 已移除magnet链接支持
 		} else if s.Is("a") {
 			// 提取夸克网盘链接
 			href := s.AttrOr("href", "")
